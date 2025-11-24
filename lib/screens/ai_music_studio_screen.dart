@@ -501,7 +501,7 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
   Widget _buildLibraryTab() {
     return const Padding(
       padding: EdgeInsets.all(16),
-      child: TrackListWidget(),
+      child: TrackListWidget(key: TrackListWidget.globalKey),
     );
   }
 
