@@ -10,18 +10,52 @@ class WebhookService {
 
   /// Get the webhook URL for the current deployment
   static String getWebhookUrl() {
+    String webhookUrl;
+
+    // Check if we're running on Railway (detect by hostname)
+    if (_isRunningOnRailway()) {
+      // Use your actual Railway URL
+      webhookUrl = 'https://dap-production-99ef.up.railway.app$_defaultWebhookPath';
+      Logger.log('🌐 Using Railway webhook URL: $webhookUrl');
+      return webhookUrl;
+    }
+
     // In production (Railway), use the deployment URL
     const railwayUrl = String.fromEnvironment('RAILWAY_STATIC_URL');
     const customDomain = String.fromEnvironment('CUSTOM_DOMAIN');
 
     if (railwayUrl.isNotEmpty) {
-      return 'https://$railwayUrl$_defaultWebhookPath';
+      webhookUrl = 'https://$railwayUrl$_defaultWebhookPath';
+      Logger.log('🌐 Using environment Railway URL: $webhookUrl');
+      return webhookUrl;
     } else if (customDomain.isNotEmpty) {
-      return 'https://$customDomain$_defaultWebhookPath';
+      webhookUrl = 'https://$customDomain$_defaultWebhookPath';
+      Logger.log('🌐 Using custom domain URL: $webhookUrl');
+      return webhookUrl;
     } else {
       // For local development, return a placeholder
-      // In practice, webhooks won't work locally
-      return 'https://localhost:3000$_defaultWebhookPath';
+      webhookUrl = 'https://localhost:3000$_defaultWebhookPath';
+      Logger.log('⚠️ Falling back to localhost URL: $webhookUrl (webhooks will not work)');
+      return webhookUrl;
+    }
+  }
+
+  /// Check if running on Railway by detecting the hostname
+  static bool _isRunningOnRailway() {
+    // In Flutter web, check if we're running on a Railway domain
+    try {
+      // This will work in Flutter web to detect the current domain
+      final currentUrl = Uri.base.toString();
+      Logger.log('🔍 Current URL detected: $currentUrl');
+
+      final isRailway = currentUrl.contains('railway.app') ||
+                       currentUrl.contains('dap-production-99ef.up.railway.app');
+
+      Logger.log('🚂 Running on Railway: $isRailway');
+      return isRailway;
+    } catch (e) {
+      Logger.log('❌ Error detecting Railway: $e');
+      return false;
     }
   }
 
