@@ -441,31 +441,6 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
 
     widget.onGenerationStart();
 
-    // Create processing track immediately to show in library
-    final processingTrackId = 'processing_${DateTime.now().millisecondsSinceEpoch}';
-    final processingTrack = AITrack(
-      id: processingTrackId,
-      title: _promptController.text.trim().length > 50
-          ? '${_promptController.text.trim().substring(0, 47)}...'
-          : _promptController.text.trim(),
-      artist: 'AI Artist',
-      genre: _selectedGenre,
-      mood: _selectedMood,
-      duration: Duration(seconds: _duration.round()),
-      audioUrl: '', // Empty until generation completes
-      createdAt: DateTime.now(),
-      isInstrumental: !_includeVocals,
-      lyrics: _generateLyrics && _lyricsController.text.isNotEmpty
-          ? _lyricsController.text.trim()
-          : null,
-      isProcessing: true,
-      processingStatus: 'Generating music...',
-      processingCompleted: false,
-    );
-
-    // Add processing track to library immediately
-    widget.onGenerationComplete(processingTrack);
-
     try {
       final generatedTrack = await widget.aiMusicService.generateMusic(
         prompt: _promptController.text.trim(),
@@ -479,6 +454,31 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
           : null,
         instrumental: !_includeVocals,
         language: _isArabicMode ? 'arabic' : 'english',
+        onTaskIdReceived: (taskId) {
+          // Create processing track with the actual taskId when received
+          final processingTrack = AITrack(
+            id: taskId, // Use actual taskId from kie.ai
+            title: _promptController.text.trim().length > 50
+                ? '${_promptController.text.trim().substring(0, 47)}...'
+                : _promptController.text.trim(),
+            artist: 'AI Artist',
+            genre: _selectedGenre,
+            mood: _selectedMood,
+            duration: Duration(seconds: _duration.round()),
+            audioUrl: '', // Empty until generation completes
+            createdAt: DateTime.now(),
+            isInstrumental: !_includeVocals,
+            lyrics: _generateLyrics && _lyricsController.text.isNotEmpty
+                ? _lyricsController.text.trim()
+                : null,
+            isProcessing: true,
+            processingStatus: 'Generating music...',
+            processingCompleted: false,
+          );
+
+          // Add processing track to library immediately
+          widget.onGenerationComplete(processingTrack);
+        },
       );
 
       // Convert GeneratedTrack to completed AITrack

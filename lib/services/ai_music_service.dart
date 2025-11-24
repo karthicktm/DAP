@@ -106,6 +106,7 @@ class AIMusicService {
     String? vocalGender,
     double temperature = 0.7,
     String? model = 'suno-v5',
+    Function(String taskId)? onTaskIdReceived,
   }) async {
     try {
       final requestData = {
@@ -187,6 +188,11 @@ class AIMusicService {
         if (data is Map && data.containsKey('taskId')) {
           final taskId = data['taskId'];
           Logger.log('Received taskId: $taskId - Music generation submitted successfully');
+
+          // Call the callback to create processing track immediately
+          if (onTaskIdReceived != null) {
+            onTaskIdReceived(taskId);
+          }
 
           // Poll for the actual track result
           return await _pollForTrackResult(taskId, apiKey);
