@@ -441,6 +441,31 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
 
     widget.onGenerationStart();
 
+    // Create processing track immediately to show in library
+    final processingTrackId = 'processing_${DateTime.now().millisecondsSinceEpoch}';
+    final processingTrack = AITrack(
+      id: processingTrackId,
+      title: _promptController.text.trim().length > 50
+          ? '${_promptController.text.trim().substring(0, 47)}...'
+          : _promptController.text.trim(),
+      artist: 'AI Artist',
+      genre: _selectedGenre,
+      mood: _selectedMood,
+      duration: Duration(seconds: _duration.round()),
+      audioUrl: '', // Empty until generation completes
+      createdAt: DateTime.now(),
+      isInstrumental: !_includeVocals,
+      lyrics: _generateLyrics && _lyricsController.text.isNotEmpty
+          ? _lyricsController.text.trim()
+          : null,
+      isProcessing: true,
+      processingStatus: 'Generating music...',
+      processingCompleted: false,
+    );
+
+    // Add processing track to library immediately
+    widget.onGenerationComplete(processingTrack);
+
     try {
       final generatedTrack = await widget.aiMusicService.generateMusic(
         prompt: _promptController.text.trim(),
@@ -456,9 +481,9 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
         language: _isArabicMode ? 'arabic' : 'english',
       );
 
-      // Convert GeneratedTrack to AITrack
-      final track = AITrack(
-        id: generatedTrack.id,
+      // Convert GeneratedTrack to completed AITrack
+      final completedTrack = AITrack(
+        id: generatedTrack.id, // Use real kie.ai track ID
         title: generatedTrack.title,
         artist: generatedTrack.artist,
         genre: generatedTrack.genre,
@@ -472,10 +497,21 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
         isInstrumental: !_includeVocals,
         lyrics: _generateLyrics ? generatedTrack.metadata['lyrics'] as String? : null,
         metadata: generatedTrack.metadata,
+        isProcessing: false,
+        processingCompleted: true,
+        processingStatus: 'Completed',
       );
 
-      widget.onGenerationComplete(track);
+      // Replace processing track with completed track
+      widget.onGenerationComplete(completedTrack);
     } catch (e) {
+      // Update processing track to show error state
+      final errorTrack = processingTrack.copyWith(
+        isProcessing: false,
+        processingCompleted: false,
+        processingStatus: 'Generation failed',
+      );
+      widget.onGenerationComplete(errorTrack);
       widget.onGenerationError(e.toString());
     }
   }

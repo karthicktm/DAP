@@ -379,19 +379,27 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
               onGenerationComplete: (track) async {
                 setState(() => _isGenerating = false);
 
-                // Save track to database
-                try {
-                  final saved = await _databaseService.saveTrack(track);
-                  if (saved) {
-                    _showSuccessSnackbar('Music generated and saved: ${track.title}');
-                  } else {
-                    _showSuccessSnackbar('Music generated (demo mode): ${track.title}');
-                  }
+                // Add track to library immediately (for processing state)
+                TrackListWidget.globalKey.currentState?.addTrack(track);
 
-                  // Refresh the track list in the Library tab
-                  TrackListWidget.globalKey.currentState?.refreshTracks();
-                } catch (e) {
-                  _showSuccessSnackbar('Music generated: ${track.title}');
+                // Save track to database if it's completed
+                if (!track.isProcessing) {
+                  try {
+                    final saved = await _databaseService.saveTrack(track);
+                    if (saved) {
+                      _showSuccessSnackbar('Music generated and saved: ${track.title}');
+                    } else {
+                      _showSuccessSnackbar('Music generated (demo mode): ${track.title}');
+                    }
+
+                    // Refresh the track list to sync with database
+                    TrackListWidget.globalKey.currentState?.refreshTracks();
+                  } catch (e) {
+                    _showSuccessSnackbar('Music generated: ${track.title}');
+                  }
+                } else {
+                  // For processing tracks, just show immediate feedback
+                  _showInfoSnackbar('🎵 Generating: ${track.title}');
                 }
               },
               onGenerationError: (error) {
@@ -842,6 +850,26 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
         ),
         backgroundColor: const Color(0xFF10B981),
         duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+
+  void _showInfoSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: const Color(0xFF8B5CF6),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

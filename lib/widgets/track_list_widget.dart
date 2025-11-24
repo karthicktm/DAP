@@ -73,6 +73,16 @@ class _TrackListWidgetState extends State<TrackListWidget> {
     await _loadTracks();
   }
 
+  // Public method to add a track (for processing tracks)
+  void addTrack(AITrack track) {
+    setState(() {
+      // Remove any existing track with same ID (in case of updates)
+      _tracks.removeWhere((t) => t.id == track.id);
+      // Add new/updated track at the beginning
+      _tracks.insert(0, track);
+    });
+  }
+
   Future<void> _initializeAudioPlayer() async {
     await _audioPlayerService.initialize();
 
