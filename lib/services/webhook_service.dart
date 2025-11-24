@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../utils/logger.dart';
 import '../models/generated_track.dart';
-import '../services/music_library_service.dart';
 
 /// Service to handle webhook callbacks and polling
 class WebhookService {
@@ -57,13 +56,10 @@ class WebhookService {
         final trackData = _extractTrackFromWebhook(payload);
 
         if (trackData != null) {
-          // Save to library
-          final musicLibrary = MusicLibraryService();
-          await musicLibrary.addTrack(trackData);
+          Logger.log('✅ Track received from webhook: ${trackData.title}');
 
-          Logger.log('✅ Track saved from webhook: ${trackData.title}');
-
-          // Notify UI if needed (using stream controllers or state management)
+          // TODO: Save to local storage/database when music library service is implemented
+          // For now, just notify UI that track is ready
           _notifyTrackCompleted(trackData);
         }
       } else if (status == 'failed' || status == 'error') {
