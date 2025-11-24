@@ -6,6 +6,7 @@ import '../errors/exceptions.dart';
 import '../utils/logger.dart';
 import '../services/secure_storage_service.dart';
 import '../services/webhook_service.dart';
+import '../services/supabase_service.dart';
 import '../models/generated_track.dart';
 
 /// AI Music Generation Service using kie.ai Suno API
@@ -249,7 +250,26 @@ class AIMusicService {
               data['audio_url'].toString().isNotEmpty &&
               data['title'] != null) {
             Logger.log('✅ Track generation completed!');
-            return GeneratedTrack.fromJson(Map<String, dynamic>.from(data));
+
+            final track = GeneratedTrack.fromJson(Map<String, dynamic>.from(data));
+
+            // Save completed track to Supabase
+            try {
+              await SupabaseService.saveTrack(
+                title: track.title,
+                audioUrl: track.audioUrl,
+                coverImageUrl: track.coverImageUrl,
+                genre: track.genre,
+                mood: track.mood,
+                duration: track.duration,
+              );
+              Logger.log('✅ Track saved to Supabase: ${track.title}');
+            } catch (e) {
+              Logger.log('❌ Failed to save track to Supabase: $e');
+              // Continue anyway - track is still usable
+            }
+
+            return track;
           }
 
           // Check if there's an error

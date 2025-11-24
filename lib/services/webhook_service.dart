@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../utils/logger.dart';
 import '../models/generated_track.dart';
+import '../services/supabase_service.dart';
 
 /// Service to handle webhook callbacks and polling
 class WebhookService {
@@ -58,9 +59,24 @@ class WebhookService {
         if (trackData != null) {
           Logger.log('✅ Track received from webhook: ${trackData.title}');
 
-          // TODO: Save to local storage/database when music library service is implemented
-          // For now, just notify UI that track is ready
-          _notifyTrackCompleted(trackData);
+          // Save track to Supabase
+          try {
+            await SupabaseService.saveTrack(
+              title: trackData.title,
+              audioUrl: trackData.audioUrl,
+              coverImageUrl: trackData.coverImageUrl,
+              genre: trackData.genre,
+              mood: trackData.mood,
+              duration: trackData.duration,
+            );
+
+            Logger.log('✅ Track saved to Supabase: ${trackData.title}');
+            _notifyTrackCompleted(trackData);
+          } catch (e) {
+            Logger.log('❌ Failed to save track to Supabase: $e');
+            // Still notify UI that track is available, even if save failed
+            _notifyTrackCompleted(trackData);
+          }
         }
       } else if (status == 'failed' || status == 'error') {
         final errorMessage = payload['error'] as String? ?? 'Unknown error';
