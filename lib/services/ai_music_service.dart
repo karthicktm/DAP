@@ -116,8 +116,7 @@ class AIMusicService {
         'language': language,
         'duration': duration, // Now properly using duration from UI
         'model': 'V5', // Force V5 model for kie.ai API
-        // Note: Webhook URL commented out - using polling only for now
-        // 'callBackUrl': WebhookService.getWebhookUrl(),
+        'callBackUrl': WebhookService.getWebhookUrl(), // Re-enabled webhook callbacks
         'customMode': false, // Required by kie.ai API
         'instrumental': instrumental, // Required by kie.ai API
         'includeLyrics': includeLyrics, // Add lyrics flag
