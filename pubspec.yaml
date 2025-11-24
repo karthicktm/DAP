@@ -1,0 +1,107 @@
+name: ai_radio_platform
+description: AI-powered digital audio platform with live radio, karaoke, and music generation
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.0
+  flutter: "3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Core Flutter & Architecture - Latest 2025 Versions
+  flutter_riverpod: ^2.5.1
+  go_router: ^13.0.0
+
+  # Code Generation
+  json_annotation: ^4.9.0
+  build_runner: ^2.4.11
+  freezed_annotation: ^2.4.1
+
+  # UI/UX - Latest 2025 Design Trends
+  lottie: ^3.1.0
+  flutter_animate: ^4.5.0
+
+  # Audio/Media - Latest 2025 audio packages
+  just_audio: ^0.10.5
+  just_audio_web: ^0.4.16
+  flutter_sound: ^9.29.13
+  record: ^6.1.2
+  flutter_audio_waveforms: ^1.2.1+8
+  waveform_recorder: ^1.8.0
+  permission_handler: ^11.3.1
+
+  # Networking & API
+  dio: ^5.4.0
+  web_socket_channel: ^2.4.0
+  retrofit: ^4.0.3
+
+  # Backend Integration
+  supabase_flutter: ^2.6.0
+
+  # Storage & Caching
+  cached_network_image: ^3.4.1
+  shared_preferences: ^2.3.2
+
+  # Security & Utils - Latest 2025
+  flutter_secure_storage: ^9.2.2
+  crypto: ^3.0.6
+  intl: ^0.20.2
+  envied: ^0.5.4+1
+
+  # Development Tools
+  equatable: ^2.0.7
+
+  # Form Validation - Latest 2025
+  formz: ^0.8.0
+
+  # Localization
+  flutter_localizations:
+    sdk: flutter
+  flutter_dotenv: ^5.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Code Generation
+  json_serializable: ^6.9.5
+  freezed: ^2.5.8
+
+  # Testing
+  mockito: ^5.4.6
+  integration_test:
+    sdk: flutter
+
+  # Linting & Analysis
+  flutter_lints: ^4.0.0
+  very_good_analysis: ^6.0.0
+
+  # Performance
+  flutter_native_splash: ^2.4.4
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/images/
+    - assets/animations/
+    - assets/audio/
+    - .env
+
+flutter_native_splash:
+  color: "#0F0F23"
+  image: assets/images/logo.png
+  android_gravity: center
+  ios_content_mode: center
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/app_icon.png
+  min_sdk_android: 21

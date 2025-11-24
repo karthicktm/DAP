@@ -1,0 +1,13 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "./Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+
+[env]
+PORT = "80"
+FLUTTER_WEB_AUTO_DETECT = "true"
+NODE_ENV = "production"
