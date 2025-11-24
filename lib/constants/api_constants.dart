@@ -12,7 +12,7 @@ class ApiConstants {
 
   // API Endpoints
   static const String musicGeneration = '/generate';
-  static const String musicStatus = '/status/'; // Add status checking endpoint
+  static const String musicStatus = '/query?taskId='; // kie.ai task status endpoint
   static const String imageGeneration = '/image/generate';
   static const String llmGeneration = '/llm/generate';
   static const String audioStems = '/audio/separate-stems';
