@@ -41,6 +41,12 @@ dependencies:
 
   # Backend Integration
   supabase_flutter: ^2.6.0
+  supabase: ^2.0.0
+
+  # Webhook Server Dependencies
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  shelf_cors_headers: ^0.1.7
 
   # Storage & Caching
   cached_network_image: ^3.4.1

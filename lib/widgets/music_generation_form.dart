@@ -456,23 +456,11 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
           : null,
         instrumental: !_includeVocals,
         language: _isArabicMode ? 'arabic' : 'english',
-        // onTaskIdReceived: null, // Disabled to prevent crashes - polling will handle everything
-        onTrackCompleted: (completedTrack) {
-          // Update UI when polling completes - replace processing track with completed track
-          Future.microtask(() {
-            try {
-              Logger.log('🎵 Polling completed, updating UI with completed track');
-              widget.onGenerationComplete(completedTrack);
-            } catch (e) {
-              Logger.log('❌ Error updating completed track: $e');
-            }
-          });
-        },
       );
 
-      // Track completion is handled by the AI service during polling
-      // The processing track will be automatically updated when polling completes
-      Logger.log('🎵 Music generation completed successfully');
+      // Webhook-based system: processing track is already saved to database
+      // Real track will be updated via webhook when kie.ai completes generation
+      Logger.log('🎵 Music generation submitted successfully via webhook system');
     } catch (e) {
       // Create error track with same parameters as would have been used for processing
       final errorTrack = AITrack(
