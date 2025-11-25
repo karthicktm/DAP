@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/ai_music_service.dart';
 import '../models/ai_track.dart';
@@ -63,6 +64,9 @@ class _TrackListWidgetState extends State<TrackListWidget> {
       });
 
       Logger.log('✅ Loaded ${tracks.length} tracks from database');
+
+      // Set up real-time updates for webhook completion
+      _setupRealTimeUpdates();
     } catch (e) {
       Logger.log('❌ Error loading tracks: $e');
       setState(() {
@@ -70,6 +74,38 @@ class _TrackListWidgetState extends State<TrackListWidget> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Setup real-time database updates to automatically refresh when tracks are completed via webhook
+  void _setupRealTimeUpdates() {
+    // Refresh tracks every 10 seconds to catch webhook updates
+    // In production, you might want to use Supabase real-time subscriptions
+    Timer.periodic(const Duration(seconds: 10), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final updatedTracks = await _databaseService.getAllTracks();
+
+        // Check if there are new completed tracks
+        final hasNewCompletedTracks = updatedTracks.any((track) =>
+          track.processingCompleted &&
+          !_tracks.any((existingTrack) => existingTrack.id == track.id && existingTrack.processingCompleted)
+        );
+
+        if (hasNewCompletedTracks) {
+          Logger.log('🔄 Detected completed tracks via webhook, refreshing UI');
+          setState(() {
+            _tracks.clear();
+            _tracks.addAll(updatedTracks);
+          });
+        }
+      } catch (e) {
+        Logger.log('❌ Error during real-time update: $e');
+      }
+    });
   }
 
   // Public refresh method that can be called from outside

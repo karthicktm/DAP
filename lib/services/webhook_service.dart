@@ -71,73 +71,130 @@ class WebhookService {
   /// Process webhook payload from kie.ai
   static Future<void> processWebhook(Map<String, dynamic> payload) async {
     try {
-      Logger.log('Processing webhook payload: $payload');
+      Logger.log('🔔 Processing kie.ai webhook payload: $payload');
 
-      // Validate webhook payload
-      if (!_isValidWebhookPayload(payload)) {
-        Logger.log('Invalid webhook payload received');
+      // Validate webhook payload structure according to kie.ai docs
+      if (!_isValidKieAiWebhookPayload(payload)) {
+        Logger.log('❌ Invalid kie.ai webhook payload received');
         return;
       }
 
-      final taskId = payload['taskId'] as String?;
-      final status = payload['status'] as String?;
+      final code = payload['code'] as int?;
+      final data = payload['data'] as Map<String, dynamic>?;
+
+      if (code != 200 || data == null) {
+        Logger.log('❌ Webhook returned error code: $code');
+        return;
+      }
+
+      final callbackType = data['callbackType'] as String?;
+      final taskId = data['task_id'] as String? ?? data['taskId'] as String?;
+      final trackDataList = data['data'] as List?;
 
       if (taskId == null) {
-        Logger.log('Webhook missing taskId');
+        Logger.log('❌ Webhook missing taskId');
         return;
       }
 
-      if (status == 'completed' || status == 'success') {
-        // Extract track data from webhook
-        final trackData = _extractTrackFromWebhook(payload);
+      Logger.log('📋 Webhook details: callbackType=$callbackType, taskId=$taskId');
 
-        if (trackData != null) {
-          Logger.log('✅ Track received from webhook: ${trackData.title}');
+      if (callbackType == 'complete' && trackDataList != null && trackDataList.isNotEmpty) {
+        // Extract the first track data (kie.ai can return multiple tracks)
+        final firstTrack = trackDataList[0] as Map<String, dynamic>;
 
-          // Save track to database
-          try {
-            final aiTrack = AITrack(
-              id: trackData.id,
-              title: trackData.title,
-              artist: trackData.artist,
-              genre: trackData.genre,
-              mood: trackData.mood,
-              duration: Duration(seconds: trackData.duration),
-              audioUrl: trackData.audioUrl,
-              coverArtUrl: trackData.coverImageUrl,
-              createdAt: DateTime.now(),
-              isInstrumental: false,
-              lyrics: null,
-            );
+        Logger.log('🎵 Processing completed track from webhook:');
+        Logger.log('   Title: ${firstTrack['title']}');
+        Logger.log('   Audio URL: ${firstTrack['audioUrl']}');
+        Logger.log('   Duration: ${firstTrack['duration']}');
 
-            await TrackDatabaseService().saveTrack(aiTrack);
+        // Update the existing processing track in Supabase
+        await _updateTrackFromWebhook(taskId, firstTrack);
 
-            Logger.log('✅ Track saved to database: ${trackData.title}');
-            _notifyTrackCompleted(trackData);
-          } catch (e) {
-            Logger.log('❌ Failed to save track to Supabase: $e');
-            // Still notify UI that track is available, even if save failed
-            _notifyTrackCompleted(trackData);
-          }
-        }
-      } else if (status == 'failed' || status == 'error') {
-        final errorMessage = payload['error'] as String? ?? 'Unknown error';
-        Logger.log('❌ Track generation failed via webhook: $errorMessage');
+      } else if (callbackType == 'first' && trackDataList != null && trackDataList.isNotEmpty) {
+        // First track completed - update status but keep processing
+        final firstTrack = trackDataList[0] as Map<String, dynamic>;
+        Logger.log('🎵 First track completed: ${firstTrack['title']}');
 
-        // Notify UI of failure
-        _notifyTrackFailed(taskId, errorMessage);
+        await _updateProcessingStatus(taskId, 'First track completed - generating remaining tracks...');
+
+      } else if (callbackType == 'text') {
+        // Text generation completed
+        Logger.log('📝 Text generation completed for taskId: $taskId');
+        await _updateProcessingStatus(taskId, 'Text generated - creating audio...');
+
+      } else {
+        Logger.log('⚠️ Unknown callback type or missing data: $callbackType');
       }
 
     } catch (e) {
-      Logger.log('Error processing webhook: $e');
+      Logger.log('❌ Error processing kie.ai webhook: $e');
     }
   }
 
-  /// Validate incoming webhook payload
-  static bool _isValidWebhookPayload(Map<String, dynamic> payload) {
-    // Basic validation - you might want to add signature verification
-    return payload.containsKey('taskId') &&
-           payload.containsKey('status');
+  /// Validate kie.ai webhook payload structure
+  static bool _isValidKieAiWebhookPayload(Map<String, dynamic> payload) {
+    return payload.containsKey('code') &&
+           payload.containsKey('data') &&
+           payload['data'] is Map<String, dynamic>;
+  }
+
+  /// Update processing track with completed data from webhook
+  static Future<void> _updateTrackFromWebhook(String taskId, Map<String, dynamic> trackData) async {
+    try {
+      final databaseService = TrackDatabaseService();
+
+      // Create updated track with real data from kie.ai
+      final updatedTrack = AITrack(
+        id: taskId,
+        title: trackData['title'] ?? 'AI Generated Track',
+        artist: 'AI Artist',
+        genre: trackData['tags'] ?? 'AI Music',
+        mood: 'Generated',
+        duration: Duration(seconds: (trackData['duration'] is num) ? trackData['duration'].toInt() : 120),
+        audioUrl: trackData['audioUrl'] ?? '',
+        coverArtUrl: trackData['imageUrl'] ?? '',
+        createdAt: DateTime.parse(trackData['createTime'] ?? DateTime.now().toIso8601String()),
+        isInstrumental: false,
+        lyrics: null,
+        isProcessing: false,
+        processingCompleted: true,
+        processingStatus: 'Completed via webhook',
+        metadata: {
+          'taskId': taskId,
+          'sunoId': trackData['id'] ?? '',
+          'prompt': trackData['prompt'] ?? '',
+          'model_name': trackData['model_name'] ?? 'V5',
+          'tags': trackData['tags'] ?? '',
+          'streamAudioUrl': trackData['streamAudioUrl'] ?? '',
+          'webhookReceived': true,
+          'completedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Update the track in Supabase
+      final success = await databaseService.saveTrack(updatedTrack);
+
+      if (success) {
+        Logger.log('✅ Track updated in Supabase with real audio URL: ${trackData['audioUrl']}');
+        _notifyTrackCompleted(updatedTrack);
+      } else {
+        Logger.log('❌ Failed to update track in Supabase');
+      }
+
+    } catch (e) {
+      Logger.log('❌ Error updating track from webhook: $e');
+    }
+  }
+
+  /// Update processing status for a track
+  static Future<void> _updateProcessingStatus(String taskId, String status) async {
+    try {
+      final databaseService = TrackDatabaseService();
+      await databaseService.updateProcessingStatus(taskId, status);
+      Logger.log('📱 Updated processing status for $taskId: $status');
+    } catch (e) {
+      Logger.log('❌ Error updating processing status: $e');
+    }
   }
 
   /// Extract track data from webhook payload
@@ -158,14 +215,17 @@ class WebhookService {
   }
 
   /// Notify UI that track is completed
-  static void _notifyTrackCompleted(GeneratedTrack track) {
-    // Implement notification mechanism (streams, callbacks, etc.)
-    Logger.log('🎵 Track generation completed: ${track.title}');
+  static void _notifyTrackCompleted(AITrack track) {
+    // Notification will happen through Supabase real-time updates
+    // The UI should listen to database changes for the track list
+    Logger.log('🎵 Track generation completed via webhook: ${track.title}');
+    Logger.log('🔗 Audio URL available: ${track.audioUrl}');
   }
 
   /// Notify UI that track failed
   static void _notifyTrackFailed(String taskId, String error) {
-    // Implement failure notification
+    // Update the processing track to show failure status
     Logger.log('💥 Track generation failed for $taskId: $error');
+    _updateProcessingStatus(taskId, 'Failed: $error');
   }
 }

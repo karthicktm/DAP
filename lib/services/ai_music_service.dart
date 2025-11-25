@@ -122,6 +122,7 @@ class AIMusicService {
         'prompt': formattedPrompt,
         'instrumental': instrumental,
         'model': 'V5',
+        'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music', // Webhook for real-time updates
       };
 
       // Add optional parameters
@@ -173,12 +174,62 @@ class AIMusicService {
           final taskId = data['data']['taskId'];
           Logger.log('✅ Received taskId: $taskId - Music generation submitted successfully');
 
+          // Create processing track and save to Supabase immediately
+          final processingTrack = AITrack(
+            id: taskId,
+            title: 'Generating: ${prompt.substring(0, prompt.length.clamp(0, 30))}...',
+            artist: 'AI Music Generator',
+            genre: genre ?? 'AI Music',
+            mood: mood ?? 'Generated',
+            duration: Duration(seconds: duration),
+            audioUrl: '', // Will be updated by webhook
+            coverArtUrl: null,
+            createdAt: DateTime.now(),
+            isInstrumental: instrumental,
+            lyrics: lyrics,
+            isProcessing: true,
+            processingStatus: 'Submitted to kie.ai - waiting for webhook...',
+            processingCompleted: false,
+            metadata: {
+              'taskId': taskId,
+              'originalPrompt': prompt,
+              'requestedGenre': genre,
+              'requestedMood': mood,
+              'webhookExpected': true,
+            },
+          );
+
+          // Save processing track to database
+          try {
+            await TrackDatabaseService().saveTrack(processingTrack);
+            Logger.log('✅ Processing track saved to database with taskId: $taskId');
+          } catch (e) {
+            Logger.log('❌ Failed to save processing track: $e');
+          }
+
+          // Notify UI of the processing track
           if (onTaskIdReceived != null) {
             onTaskIdReceived(taskId);
           }
 
-          Logger.log('🔄 Starting polling for taskId: $taskId');
-          return await _pollForTrackResult(taskId, onTrackCompleted, genre, mood);
+          if (onTrackCompleted != null) {
+            onTrackCompleted(processingTrack);
+          }
+
+          // Return a mock generated track for UI compatibility
+          // Real track will be updated by webhook
+          return GeneratedTrack(
+            id: taskId,
+            title: processingTrack.title,
+            artist: processingTrack.artist,
+            genre: processingTrack.genre,
+            mood: processingTrack.mood,
+            audioUrl: '',
+            coverImageUrl: '',
+            duration: duration,
+            createdAt: DateTime.now(),
+            metadata: processingTrack.metadata,
+          );
         }
 
         // Try to parse as complete track
@@ -203,156 +254,6 @@ class AIMusicService {
     }
   }
 
-  /// Poll for track result using taskId
-  Future<GeneratedTrack> _pollForTrackResult(String taskId, Function(AITrack)? onTrackCompleted, String? originalGenre, String? originalMood) async {
-    final dio = await _dioInstance;
-
-    Logger.log('🔄 Starting to poll for track result with taskId: $taskId');
-
-    int attempts = 0;
-    const maxAttempts = 60; // Poll for up to 10 minutes (60 attempts × 10 seconds)
-
-    while (attempts < maxAttempts) {
-      attempts++;
-      Logger.log('📡 Polling attempt $attempts/$maxAttempts for taskId: $taskId');
-
-      try {
-        // Wait before polling (except first attempt)
-        if (attempts > 1) {
-          await Future.delayed(const Duration(seconds: 10));
-        }
-
-        final response = await dio.get(
-          '${ApiConstants.musicStatus}?taskId=$taskId',
-          options: Options(
-            responseType: ResponseType.json,
-          ),
-        );
-
-        if (response.statusCode == 200) {
-          final data = response.data;
-          Logger.log('📥 Full polling response: $data');
-
-          // Check response structure
-          if (data is Map) {
-            Logger.log('📊 Response code: ${data['code']}');
-            Logger.log('📊 Response msg: ${data['msg']}');
-            if (data['data'] != null) {
-              Logger.log('📊 Data status: ${data['data']['status']}');
-              Logger.log('📊 Has response: ${data['data']['response'] != null}');
-              if (data['data']['response'] != null && data['data']['response']['sunoData'] != null) {
-                Logger.log('📊 SunoData length: ${data['data']['response']['sunoData'].length}');
-              }
-            }
-          }
-
-          // Check if we have a successful response with track data
-          if (data is Map &&
-              data['code'] == 200 &&
-              data['data'] != null &&
-              data['data']['status'] == 'SUCCESS' &&
-              data['data']['response'] != null &&
-              data['data']['response']['sunoData'] != null) {
-
-            final responseData = data['data']['response'];
-            final sunoData = responseData['sunoData'] as List;
-
-            if (sunoData.isNotEmpty) {
-              Logger.log('✅ Track generation completed successfully!');
-
-              // Use the first track from sunoData
-              final firstTrack = sunoData[0] as Map<String, dynamic>;
-              Logger.log('🎵 Track Details:');
-              Logger.log('   Title: ${firstTrack['title']}');
-              Logger.log('   Audio URL: ${firstTrack['audioUrl']}');
-              Logger.log('   Duration: ${firstTrack['duration']}s');
-              Logger.log('   Image URL: ${firstTrack['imageUrl']}');
-
-              // Convert to GeneratedTrack format using actual kie.ai response structure
-              final trackData = {
-                'id': data['data']['taskId'],
-                'title': firstTrack['title'] ?? 'AI Generated Track',
-                'artist': 'AI Artist',
-                'genre': originalGenre ?? 'AI Music',
-                'mood': originalMood ?? 'Generated',
-                'duration': (firstTrack['duration'] is num) ? firstTrack['duration'].toInt() : 120,
-                'audio_url': firstTrack['audioUrl'] ?? '',
-                'cover_image_url': firstTrack['imageUrl'] ?? '',
-                'created_at': DateTime.now().toIso8601String(),
-                'metadata': {
-                  'prompt': firstTrack['prompt'] ?? '',
-                  'tags': firstTrack['tags'] ?? '',
-                  'sunoId': firstTrack['id'] ?? '',
-                  'streamAudioUrl': firstTrack['streamAudioUrl'] ?? '',
-                  'taskId': taskId,
-                }
-              };
-
-              final track = GeneratedTrack.fromJson(trackData);
-
-            // Create AITrack and notify UI callback
-            final aiTrack = AITrack(
-              id: taskId,
-              title: track.title,
-              artist: track.artist,
-              genre: track.genre,
-              mood: track.mood,
-              duration: Duration(seconds: track.duration),
-              audioUrl: track.audioUrl,
-              coverArtUrl: track.coverImageUrl,
-              createdAt: DateTime.now(),
-              isInstrumental: false,
-              lyrics: null,
-              isProcessing: false,
-              processingCompleted: true,
-              processingStatus: 'Completed',
-              metadata: track.metadata,
-            );
-
-            // Notify UI callback that track is completed
-            if (onTrackCompleted != null) {
-              onTrackCompleted(aiTrack);
-            }
-
-            Logger.log('✅ Track processing completed: ${track.title}');
-
-            return track;
-            }
-          }
-
-          // Check if there's an error
-          if (data is Map && data.containsKey('code') && data['code'] != 200) {
-            final errorMessage = data['msg'] ?? 'Generation failed';
-            Logger.log('❌ Track generation failed: $errorMessage');
-            throw Exception('kie.ai generation failed: $errorMessage');
-          }
-
-          // Still processing, continue polling
-          if (data is Map &&
-              data['data'] != null &&
-              (data['data']['status'] == null || data['data']['status'] != 'SUCCESS')) {
-            Logger.log('⏳ Track still processing...');
-            continue;
-          }
-
-          // If we get here without a complete track, continue polling
-          Logger.log('⏳ Incomplete response, continuing to poll...');
-          continue;
-        } else {
-          Logger.log('Status check failed with status: ${response.statusCode}');
-        }
-
-      } catch (e) {
-        Logger.log('Error during status check: $e');
-        if (attempts >= maxAttempts) {
-          rethrow;
-        }
-      }
-    }
-
-    // If we get here, polling timed out
-    throw Exception('Track generation timed out after ${maxAttempts * 10} seconds. Please try again.');
-  }
 
   /// Format prompt according to kie.ai best practices
   String _formatPromptForKieAi(String prompt, String? genre, String? mood, String? style, String? lyrics) {
