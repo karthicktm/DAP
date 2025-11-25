@@ -261,7 +261,20 @@ class AIMusicService {
 
         if (response.statusCode == 200) {
           final data = response.data;
-          Logger.log('Status check response: $data');
+          Logger.log('📥 Full polling response: $data');
+
+          // Check response structure
+          if (data is Map) {
+            Logger.log('📊 Response code: ${data['code']}');
+            Logger.log('📊 Response msg: ${data['msg']}');
+            if (data['data'] != null) {
+              Logger.log('📊 Data status: ${data['data']['status']}');
+              Logger.log('📊 Has response: ${data['data']['response'] != null}');
+              if (data['data']['response'] != null && data['data']['response']['sunoData'] != null) {
+                Logger.log('📊 SunoData length: ${data['data']['response']['sunoData'].length}');
+              }
+            }
+          }
 
           // Check if we have a successful response with track data
           if (data is Map &&
@@ -279,6 +292,10 @@ class AIMusicService {
 
               // Use the first track from sunoData
               final firstTrack = sunoData[0] as Map<String, dynamic>;
+              Logger.log('📊 Raw kie.ai track data: $firstTrack');
+              Logger.log('📊 Track title: ${firstTrack['title']}');
+              Logger.log('📊 Track audioUrl: ${firstTrack['audioUrl']}');
+              Logger.log('📊 Track duration: ${firstTrack['duration']}');
 
               // Convert to GeneratedTrack format
               final trackData = {
