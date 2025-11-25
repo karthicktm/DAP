@@ -196,9 +196,16 @@ class AIMusicService {
 
           // Call the callback to create processing track immediately
           if (onTaskIdReceived != null) {
-            onTaskIdReceived(taskId);
+            try {
+              onTaskIdReceived(taskId);
+              Logger.log('✅ Processing track callback completed');
+            } catch (e) {
+              Logger.log('❌ Error in onTaskIdReceived callback: $e');
+              // Continue with polling even if callback fails
+            }
           }
 
+          Logger.log('🔄 About to start polling for taskId: $taskId');
           // Poll for the actual track result
           return await _pollForTrackResult(taskId, apiKey);
         }
