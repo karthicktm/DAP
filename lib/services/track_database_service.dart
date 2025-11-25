@@ -45,14 +45,20 @@ class TrackDatabaseService {
       }
 
       // Initialize Supabase if not already done
-      if (Supabase.instance.client == null) {
+      try {
+        // Check if already initialized by trying to access client
+        _supabase = Supabase.instance.client;
+        Logger.log('🔄 Using existing Supabase instance');
+      } catch (e) {
+        // Not initialized yet, so initialize it
+        Logger.log('🔧 Initializing new Supabase instance');
         await Supabase.initialize(
           url: supabaseUrl,
           anonKey: supabaseKey,
         );
+        _supabase = Supabase.instance.client;
       }
 
-      _supabase = Supabase.instance.client;
       _isInitialized = true;
 
       Logger.log('✅ Supabase initialized successfully with URL: ${supabaseUrl.substring(0, 30)}...');

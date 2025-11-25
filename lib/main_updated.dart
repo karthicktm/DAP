@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'providers/settings_provider.dart';
 import 'screens/settings_screen.dart';
 import 'screens/ai_music_studio_screen_simple.dart';
 import 'widgets/track_list_widget.dart';
-import 'services/track_database_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,14 +12,7 @@ Future<void> main() async {
   // Load environment variables
   await dotenv.load(fileName: ".env");
 
-  // Initialize Supabase using TrackDatabaseService (which handles env vars properly)
-  try {
-    // Import and initialize the proper service
-    final trackDb = TrackDatabaseService();
-    await trackDb.initialize();
-  } catch (e) {
-    print('Supabase initialization failed (fallback to local storage): $e');
-  }
+  // TrackDatabaseService will handle Supabase initialization when needed
 
   runApp(
     const ProviderScope(
