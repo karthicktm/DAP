@@ -34,14 +34,23 @@ void main() async {
 
   // Webhook endpoint for kie.ai music generation callbacks
   app.post('/api/webhook/music', (Request request) async {
+    final timestamp = DateTime.now().toIso8601String();
     try {
-      print('🔔 Received webhook callback from kie.ai');
+      print('🔔 [$timestamp] Received webhook callback from kie.ai');
+      print('📍 Request headers: ${request.headers}');
+      print('📍 Request URL: ${request.requestedUri}');
 
       // Parse the webhook payload
       final body = await request.readAsString();
-      final payload = jsonDecode(body) as Map<String, dynamic>;
+      print('📄 Raw webhook body: $body');
 
-      print('📋 Webhook payload: $payload');
+      if (body.isEmpty) {
+        print('❌ Empty webhook body received');
+        return Response.badRequest(body: 'Empty payload');
+      }
+
+      final payload = jsonDecode(body) as Map<String, dynamic>;
+      print('📋 [$timestamp] Parsed webhook payload: $payload');
 
       // Validate the kie.ai webhook structure
       if (!_isValidKieAiWebhook(payload)) {
@@ -109,6 +118,24 @@ void main() async {
   // Health check endpoint
   app.get('/health', (Request request) {
     return Response.ok('Webhook service is healthy');
+  });
+
+  // Webhook monitoring endpoint for debugging
+  app.get('/api/webhook/status', (Request request) {
+    final stats = {
+      'server_status': 'running',
+      'webhook_endpoint': '/api/webhook/music',
+      'timestamp': DateTime.now().toIso8601String(),
+      'supabase_connected': supabase.supabaseUrl.isNotEmpty,
+    };
+
+    return Response.ok(
+      jsonEncode(stats),
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    );
   });
 
   // Handle CORS preflight requests
