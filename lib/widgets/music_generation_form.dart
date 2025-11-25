@@ -505,11 +505,25 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
       // Replace processing track with completed track
       widget.onGenerationComplete(completedTrack);
     } catch (e) {
-      // Update processing track to show error state
-      final errorTrack = processingTrack.copyWith(
+      // Create error track with same parameters as would have been used for processing
+      final errorTrack = AITrack(
+        id: 'error_${DateTime.now().millisecondsSinceEpoch}',
+        title: _promptController.text.trim().length > 50
+            ? '${_promptController.text.trim().substring(0, 47)}...'
+            : _promptController.text.trim(),
+        artist: 'AI Artist',
+        genre: _selectedGenre,
+        mood: _selectedMood,
+        duration: Duration(seconds: _duration.round()),
+        audioUrl: '',
+        createdAt: DateTime.now(),
+        isInstrumental: !_includeVocals,
+        lyrics: _generateLyrics && _lyricsController.text.isNotEmpty
+            ? _lyricsController.text.trim()
+            : null,
         isProcessing: false,
-        processingCompleted: false,
         processingStatus: 'Generation failed',
+        processingCompleted: false,
       );
       widget.onGenerationComplete(errorTrack);
       widget.onGenerationError(e.toString());
