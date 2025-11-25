@@ -24,10 +24,13 @@ class TrackDatabaseService {
       String? supabaseUrl = await SecureStorageService.getSupabaseUrl();
       String? supabaseKey = await SecureStorageService.getSupabaseKey();
 
+      Logger.log('🔍 Checking Supabase credentials from storage: URL=${supabaseUrl?.substring(0, 30)}..., Key=${supabaseKey?.substring(0, 10)}...');
+
       // Fall back to API constants (which may include env vars)
       if (supabaseUrl == null || supabaseKey == null) {
         supabaseUrl = ApiConstants.supabaseUrl;
         supabaseKey = ApiConstants.supabaseAnonKey;
+        Logger.log('🔍 Using API constants: URL=${supabaseUrl.substring(0, 30)}..., Key=${supabaseKey.substring(0, 10)}...');
       }
 
       // Check if we have valid credentials
@@ -35,7 +38,8 @@ class TrackDatabaseService {
           supabaseKey == 'your_supabase_anon_key' ||
           supabaseUrl.isEmpty ||
           supabaseKey.isEmpty) {
-        Logger.log('Supabase not configured, will use local storage fallback');
+        Logger.log('❌ Supabase not configured - URL: $supabaseUrl, Key: ${supabaseKey.substring(0, 10)}...');
+        Logger.log('🔄 Will use local storage fallback');
         _isInitialized = false;
         return;
       }
@@ -208,9 +212,21 @@ class TrackDatabaseService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('ai_tracks');
-      Logger.log('All tracks cleared from local storage');
+      await prefs.remove('local_tracks'); // Also clear new local tracks key
+      Logger.log('✅ All tracks cleared from local storage');
     } catch (e) {
-      Logger.log('Error clearing tracks: $e');
+      Logger.log('❌ Error clearing tracks: $e');
+    }
+  }
+
+  /// Force clear all local storage and reset for fresh start
+  Future<void> resetLocalStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear(); // Clear everything
+      Logger.log('✅ Complete local storage reset completed');
+    } catch (e) {
+      Logger.log('❌ Error resetting local storage: $e');
     }
   }
 

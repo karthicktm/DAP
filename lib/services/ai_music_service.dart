@@ -244,7 +244,7 @@ class AIMusicService {
         }
 
         final response = await dio.get(
-          '${ApiConstants.musicStatus}$taskId',
+          '${ApiConstants.musicStatus}?taskId=$taskId',
           options: Options(
             responseType: ResponseType.json,
           ),
@@ -254,14 +254,45 @@ class AIMusicService {
           final data = response.data;
           Logger.log('Status check response: $data');
 
-          // Check if we have a complete track with audio URL
+          // Check if we have a successful response with track data
           if (data is Map &&
-              data['audio_url'] != null &&
-              data['audio_url'].toString().isNotEmpty &&
-              data['title'] != null) {
-            Logger.log('✅ Track generation completed!');
+              data['code'] == 200 &&
+              data['data'] != null &&
+              data['data']['status'] == 'SUCCESS' &&
+              data['data']['response'] != null &&
+              data['data']['response']['sunoData'] != null) {
 
-            final track = GeneratedTrack.fromJson(Map<String, dynamic>.from(data));
+            final responseData = data['data']['response'];
+            final sunoData = responseData['sunoData'] as List;
+
+            if (sunoData.isNotEmpty) {
+              Logger.log('✅ Track generation completed!');
+
+              // Use the first track from sunoData
+              final firstTrack = sunoData[0] as Map<String, dynamic>;
+
+              // Convert to GeneratedTrack format
+              final trackData = {
+                'id': data['data']['taskId'],
+                'title': firstTrack['title'] ?? 'Generated Track',
+                'artist': 'AI Artist',
+                'genre': 'Generated',
+                'mood': 'Generated',
+                'duration': (firstTrack['duration'] ?? 120).round(),
+                'audio_url': firstTrack['audioUrl'] ?? '',
+                'cover_image_url': firstTrack['imageUrl'] ?? '',
+                'created_at': DateTime.fromMillisecondsSinceEpoch(
+                  firstTrack['createTime'] ?? DateTime.now().millisecondsSinceEpoch
+                ).toIso8601String(),
+                'metadata': {
+                  'prompt': firstTrack['prompt'] ?? '',
+                  'tags': firstTrack['tags'] ?? '',
+                  'model': firstTrack['modelName'] ?? '',
+                  'sunoId': firstTrack['id'] ?? '',
+                }
+              };
+
+              final track = GeneratedTrack.fromJson(trackData);
 
             // Save completed track to Supabase
             try {
@@ -290,10 +321,16 @@ class AIMusicService {
           }
 
           // Still processing, continue polling
-          if (data is Map && data['status'] == 'processing') {
+          if (data is Map &&
+              data['data'] != null &&
+              (data['data']['status'] == null || data['data']['status'] != 'SUCCESS')) {
             Logger.log('⏳ Track still processing...');
             continue;
           }
+
+          // If we get here without a complete track, continue polling
+          Logger.log('⏳ Incomplete response, continuing to poll...');
+          continue;
         } else {
           Logger.log('Status check failed with status: ${response.statusCode}');
         }
