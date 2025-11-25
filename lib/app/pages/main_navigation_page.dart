@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../shared/widgets/glass_button.dart';
+import 'home_page.dart';
 
 class MainNavigationPage extends ConsumerStatefulWidget {
   const MainNavigationPage({Key? key}) : super(key: key);
@@ -51,13 +52,16 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
-      floatingActionButton: _currentIndex == 1 ? _buildFab() : null,
+      floatingActionButton: _currentIndex == 2 ? _buildFab() : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
   List<Widget> _buildPages() {
     return [
+      // Home Page
+      const HomePage(),
+
       // Radio Page
       Navigator(
         onGenerateRoute: (settings) {
@@ -133,6 +137,10 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
           selectedFontSize: 12,
           unselectedFontSize: 12,
           items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
             BottomNavigationBarItem(
               icon: Icon(Icons.radio_rounded),
               label: 'Radio',
