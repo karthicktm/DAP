@@ -5,6 +5,7 @@ import 'providers/settings_provider.dart';
 import 'screens/settings_screen.dart';
 import 'screens/ai_music_studio_screen_simple.dart';
 import 'widgets/track_list_widget.dart';
+import 'app/pages/home_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -116,7 +117,10 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
   Widget _buildCurrentPage() {
     switch (_currentIndex) {
       case 0:
-        return _buildHomePage();
+        return HomePage(
+          onGetStarted: () => setState(() => _currentIndex = 1),
+          onWatchDemo: () => _showMessage('Demo features coming soon!', const Color(0xFF8B5CF6)),
+        );
       case 1:
         return const AIMusicStudioScreen();
       case 2:
@@ -126,36 +130,13 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
       case 4:
         return const SettingsScreen();
       default:
-        return _buildHomePage();
+        return HomePage(
+          onGetStarted: () => setState(() => _currentIndex = 1),
+          onWatchDemo: () => _showMessage('Demo features coming soon!', const Color(0xFF8B5CF6)),
+        );
     }
   }
 
-  Widget _buildHomePage() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildLogo(),
-                const SizedBox(height: 32),
-                _buildTitle(),
-                const SizedBox(height: 16),
-                _buildSubtitle(),
-                const SizedBox(height: 48),
-                _buildStatusCard(),
-                const SizedBox(height: 32),
-                _buildButtons(),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildMusicStudioPage() {
     return const SafeArea(
