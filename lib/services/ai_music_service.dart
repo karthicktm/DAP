@@ -301,23 +301,33 @@ class AIMusicService {
   String _formatPromptForKieAi(String prompt, String? genre, String? mood, String? style, String? lyrics, int duration) {
     var formattedPrompt = prompt.trim();
 
-    // Add duration hints since API has no direct duration parameter
+    // Add aggressive duration hints since API has no direct duration parameter
     String durationHint = '';
+    String durationSuffix = '';
+
     if (duration <= 30) {
-      durationHint = 'short 30 second';
+      durationHint = 'extremely short 30-second clip';
+      durationSuffix = ', keep it under 30 seconds, brief and concise';
+    } else if (duration <= 45) {
+      durationHint = 'very short 45-second snippet';
+      durationSuffix = ', maximum 45 seconds duration';
     } else if (duration <= 60) {
-      durationHint = 'one minute';
+      durationHint = 'one minute track';
+      durationSuffix = ', exactly 60 seconds long';
     } else if (duration <= 90) {
-      durationHint = 'short 90 second';
+      durationHint = 'short 90-second piece';
+      durationSuffix = ', keep under 90 seconds';
     } else if (duration <= 120) {
-      durationHint = 'two minute';
+      durationHint = 'two minute song';
+      durationSuffix = ', around 120 seconds duration';
     } else {
-      durationHint = 'full length';
+      durationHint = 'full length track';
+      durationSuffix = '';
     }
 
-    // Include duration hint in prompt
+    // Include multiple duration hints in prompt for better compliance
     if (duration <= 120) {
-      formattedPrompt = '$durationHint $formattedPrompt';
+      formattedPrompt = '$durationHint $formattedPrompt$durationSuffix';
     }
 
     // Add style and mood context if provided
@@ -385,11 +395,35 @@ class AIMusicService {
             final trackDataList = data['data'] as List?;
 
             if (trackDataList != null && trackDataList.isNotEmpty) {
-              final trackData = trackDataList[0] as Map<String, dynamic>;
+              Logger.log('🎵 Polling found ${trackDataList.length} tracks for taskId: $taskId');
+
+              // Log all tracks for analysis
+              for (int i = 0; i < trackDataList.length; i++) {
+                final track = trackDataList[i] as Map<String, dynamic>;
+                Logger.log('   Track ${i + 1}: ${track['title']} - Duration: ${track['duration']}s');
+              }
+
+              // Get the requested duration from stored track metadata
+              int requestedDuration = 120; // Default fallback
+              try {
+                // Try to get the original track to find requested duration
+                final tracks = await TrackDatabaseService().getAllTracks();
+                final originalTrack = tracks.firstWhere((t) => t.id == taskId);
+                requestedDuration = originalTrack.duration.inSeconds;
+              } catch (e) {
+                Logger.log('⚠️ Could not find original track duration, using default: $e');
+              }
+
+              // Save all tracks as alternatives, then select the best one by default
+              await _saveAllTrackAlternatives(taskId, trackDataList, requestedDuration);
+
+              // Select track closest to requested duration as the primary
+              final trackData = _selectBestTrack(trackDataList, requestedDuration);
               final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'];
 
               if (audioUrl != null && audioUrl.toString().isNotEmpty) {
-                Logger.log('✅ Track completed via polling: $audioUrl');
+                Logger.log('✅ Selected track completed via polling: $audioUrl');
+                Logger.log('📏 Selected track duration: ${trackData['duration']}s');
 
                 // Update the track in database
                 await _updateTrackFromPolling(taskId, trackData);
@@ -501,6 +535,112 @@ class AIMusicService {
         'completedViaPolling': true,
       },
     );
+  }
+
+  /// Select the best track from multiple options based on requested duration
+  Map<String, dynamic> _selectBestTrack(List trackDataList, int requestedDuration) {
+    if (trackDataList.isEmpty) {
+      throw Exception('No tracks available to select from');
+    }
+
+    if (trackDataList.length == 1) {
+      return trackDataList[0] as Map<String, dynamic>;
+    }
+
+    // Find track with duration closest to requested duration
+    Map<String, dynamic> bestTrack = trackDataList[0] as Map<String, dynamic>;
+    double bestDifference = double.infinity;
+
+    for (int i = 0; i < trackDataList.length; i++) {
+      final track = trackDataList[i] as Map<String, dynamic>;
+      final trackDuration = (track['duration'] as num?)?.toDouble() ?? 120.0;
+      final difference = (trackDuration - requestedDuration).abs();
+
+      Logger.log('   Evaluating Track ${i + 1}: ${track['title']} - Duration: ${trackDuration}s (diff: ${difference.toStringAsFixed(1)}s)');
+
+      if (difference < bestDifference) {
+        bestDifference = difference;
+        bestTrack = track;
+      }
+    }
+
+    final selectedDuration = (bestTrack['duration'] as num?)?.toDouble() ?? 120.0;
+    Logger.log('🎯 Selected best track: ${bestTrack['title']} - Duration: ${selectedDuration}s (closest to ${requestedDuration}s)');
+
+    return bestTrack;
+  }
+
+  /// Save all track alternatives to allow user choice
+  Future<void> _saveAllTrackAlternatives(String baseTaskId, List trackDataList, int requestedDuration) async {
+    try {
+      for (int i = 0; i < trackDataList.length; i++) {
+        final track = trackDataList[i] as Map<String, dynamic>;
+        // Determine which track should be the default (closest to requested duration)
+        final trackDuration = (track['duration'] as num?)?.toDouble() ?? 120.0;
+        final isClosest = _isClosestToRequestedDuration(track, trackDataList, requestedDuration);
+        final isDefault = (i == 0) || isClosest; // First track OR closest to duration
+
+        // Create unique ID for each alternative
+        final trackId = isDefault ? baseTaskId : '${baseTaskId}_alt_${i + 1}';
+
+        final audioUrl = track['audio_url'] ?? track['audioUrl'] ?? '';
+        final imageUrl = track['image_url'] ?? track['imageUrl'] ?? '';
+        final actualTitle = track['title'] ?? 'AI Generated Track ${i + 1}';
+
+        final alternativeTrack = AITrack(
+          id: trackId,
+          title: actualTitle,
+          artist: 'AI Artist',
+          genre: 'AI Music',
+          mood: 'Generated',
+          duration: Duration(seconds: (track['duration'] is num) ? track['duration'].toInt() : 120),
+          audioUrl: audioUrl,
+          coverArtUrl: imageUrl,
+          createdAt: DateTime.now(),
+          isInstrumental: false,
+          isProcessing: false,
+          processingStatus: 'Completed - Alternative ${i + 1}',
+          processingCompleted: true,
+          metadata: {
+            'sunoId': track['id'] ?? '',
+            'prompt': track['prompt'] ?? '',
+            'model_name': track['model_name'] ?? 'V5',
+            'tags': track['tags'] ?? '',
+            'streamAudioUrl': track['stream_audio_url'] ?? track['streamAudioUrl'] ?? '',
+            'completedViaPolling': true,
+            'completedAt': DateTime.now().toIso8601String(),
+            'originalTaskId': baseTaskId,
+            'alternativeIndex': i + 1,
+            'isDefault': isDefault,
+            'requestedDuration': requestedDuration,
+            'actualDuration': track['duration'],
+            'durationDifference': ((track['duration'] as num?)?.toDouble() ?? 120.0) - requestedDuration,
+          },
+        );
+
+        await TrackDatabaseService().saveTrack(alternativeTrack);
+        Logger.log('💾 Saved alternative track ${i + 1}: $actualTitle (${track['duration']}s)');
+      }
+    } catch (e) {
+      Logger.log('❌ Error saving track alternatives: $e');
+    }
+  }
+
+  /// Check if this track is closest to the requested duration
+  bool _isClosestToRequestedDuration(Map<String, dynamic> track, List trackDataList, int requestedDuration) {
+    final trackDuration = (track['duration'] as num?)?.toDouble() ?? 120.0;
+    final trackDifference = (trackDuration - requestedDuration).abs();
+
+    for (final otherTrackData in trackDataList) {
+      final otherTrack = otherTrackData as Map<String, dynamic>;
+      final otherDuration = (otherTrack['duration'] as num?)?.toDouble() ?? 120.0;
+      final otherDifference = (otherDuration - requestedDuration).abs();
+
+      if (otherDifference < trackDifference && otherTrack != track) {
+        return false;
+      }
+    }
+    return true;
   }
 
 }

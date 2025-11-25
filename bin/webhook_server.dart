@@ -78,9 +78,19 @@ void main() async {
       }
 
       if (callbackType == 'complete' && trackDataList != null && trackDataList.isNotEmpty) {
+        print('🎵 Multiple tracks received: ${trackDataList.length}');
+
+        // Log all tracks to understand what we're getting
+        for (int i = 0; i < trackDataList.length; i++) {
+          final track = trackDataList[i] as Map<String, dynamic>;
+          print('   Track ${i + 1}: ${track['title']} - Duration: ${track['duration']}s');
+          print('   Audio URL: ${track['audio_url'] ?? track['audioUrl']}');
+        }
+
+        // Select the best track (for now, use first one, but log for analysis)
         final trackData = trackDataList[0] as Map<String, dynamic>;
 
-        print('🎵 Track completed:');
+        print('🎵 Selected track (first):');
         print('   Title: ${trackData['title']}');
         print('   Audio URL: ${trackData['audio_url'] ?? trackData['audioUrl']}');
         print('   Image URL: ${trackData['image_url'] ?? trackData['imageUrl']}');
