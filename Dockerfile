@@ -3,6 +3,10 @@ FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
 # Create and switch to non-root user for security
 RUN useradd -m -s /bin/bash flutteruser
+
+# Fix git ownership issue with Flutter SDK
+RUN git config --global --add safe.directory /sdks/flutter
+
 USER flutteruser
 
 # Set working directory
