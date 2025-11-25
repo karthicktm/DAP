@@ -71,7 +71,7 @@ class AIMusicService {
     'japanese', 'korean', 'hindi', 'portuguese', 'russian', 'italian'
   ];
 
-  AiMusicService() {
+  AIMusicService() {
     // Initialize Dio will be called lazily when needed
   }
 
@@ -115,51 +115,29 @@ class AIMusicService {
     Function(AITrack completedTrack)? onTrackCompleted,
   }) async {
     try {
+      // Format the prompt according to kie.ai best practices
+      final formattedPrompt = _formatPromptForKieAi(prompt, genre, mood, style, lyrics);
+
       final requestData = {
-        'prompt': _formatPrompt(prompt, genre, mood, style),
-        'genre': genre ?? 'pop',
-        'mood': mood ?? 'happy',
-        'style': style ?? 'modern',
-        'language': language,
-        'duration': duration, // Now properly using duration from UI
-        'model': 'V5', // Force V5 model for kie.ai API
-        'callBackUrl': WebhookService.getWebhookUrl(), // Re-enabled webhook callbacks
-        'customMode': false, // Required by kie.ai API
-        'instrumental': instrumental, // Required by kie.ai API
-        'includeLyrics': includeLyrics, // Add lyrics flag
+        'prompt': formattedPrompt,
+        'instrumental': instrumental,
+        'model': 'V5',
       };
 
-      // Add lyrics if provided from UI
+      // Add optional parameters
       if (includeLyrics && lyrics != null && lyrics.isNotEmpty) {
-        requestData['lyrics'] = lyrics;
+        requestData['customMode'] = true;
+        requestData['style'] = style ?? 'modern';
+        requestData['title'] = _generateTitle(prompt, genre);
+      } else {
+        requestData['customMode'] = false;
       }
 
-      // Add vocal gender if specified
-      if (vocalGender != null && vocalGender.isNotEmpty) {
-        requestData['vocalGender'] = vocalGender;
-      }
-
-      // Add temperature for creativity control
-      requestData['temperature'] = temperature;
-
-      // Debug log to verify ALL request data
       Logger.log('🎵 Sending music generation request:');
-      Logger.log('  Prompt: ${requestData['prompt']}');
-      Logger.log('  Genre: ${requestData['genre']}');
-      Logger.log('  Mood: ${requestData['mood']}');
-      Logger.log('  Style: ${requestData['style']}');
-      Logger.log('  Duration: ${requestData['duration']}s');
-      Logger.log('  Language: ${requestData['language']}');
-      Logger.log('  Instrumental: ${requestData['instrumental']}');
-      Logger.log('  Include Lyrics: ${requestData['includeLyrics']}');
+      Logger.log('  Formatted Prompt: $formattedPrompt');
       Logger.log('  Model: ${requestData['model']}');
-      Logger.log('  Webhook URL: ${requestData['callBackUrl']}');
-      if (requestData.containsKey('lyrics')) {
-        Logger.log('  Custom Lyrics: ${requestData['lyrics']?.toString().substring(0, 50)}...');
-      }
-      if (requestData.containsKey('vocalGender')) {
-        Logger.log('  Vocal Gender: ${requestData['vocalGender']}');
-      }
+      Logger.log('  Instrumental: ${requestData['instrumental']}');
+      Logger.log('  Custom Mode: ${requestData['customMode']}');
 
       // Check if API key is configured
       final apiKey = await SecureStorageService.getKieAiKey();
@@ -191,18 +169,16 @@ class AIMusicService {
         }
 
         // Check if response contains a taskId (kie.ai async response)
-        if (data is Map && data.containsKey('taskId')) {
-          final taskId = data['taskId'];
-          Logger.log('Received taskId: $taskId - Music generation submitted successfully');
+        if (data is Map && data.containsKey('data') && data['data'] is Map && data['data']['taskId'] != null) {
+          final taskId = data['data']['taskId'];
+          Logger.log('✅ Received taskId: $taskId - Music generation submitted successfully');
 
-          // Skip processing track callback to prevent crashes - go directly to polling
           if (onTaskIdReceived != null) {
-            Logger.log('⚠️ Skipping onTaskIdReceived callback to prevent crashes');
+            onTaskIdReceived(taskId);
           }
 
-          Logger.log('🔄 About to start polling for taskId: $taskId');
-          // Poll for the actual track result
-          return await _pollForTrackResult(taskId, apiKey, onTrackCompleted, genre, mood);
+          Logger.log('🔄 Starting polling for taskId: $taskId');
+          return await _pollForTrackResult(taskId, onTrackCompleted, genre, mood);
         }
 
         // Try to parse as complete track
@@ -228,17 +204,17 @@ class AIMusicService {
   }
 
   /// Poll for track result using taskId
-  Future<GeneratedTrack> _pollForTrackResult(String taskId, String apiKey, Function(AITrack)? onTrackCompleted, String? originalGenre, String? originalMood) async {
+  Future<GeneratedTrack> _pollForTrackResult(String taskId, Function(AITrack)? onTrackCompleted, String? originalGenre, String? originalMood) async {
     final dio = await _dioInstance;
 
-    Logger.log('Starting to poll for track result with taskId: $taskId');
+    Logger.log('🔄 Starting to poll for track result with taskId: $taskId');
 
     int attempts = 0;
-    const maxAttempts = 30; // Poll for up to 5 minutes (30 attempts × 10 seconds)
+    const maxAttempts = 60; // Poll for up to 10 minutes (60 attempts × 10 seconds)
 
     while (attempts < maxAttempts) {
       attempts++;
-      Logger.log('Polling attempt $attempts/$maxAttempts for taskId: $taskId');
+      Logger.log('📡 Polling attempt $attempts/$maxAttempts for taskId: $taskId');
 
       try {
         // Wait before polling (except first attempt)
@@ -282,68 +258,63 @@ class AIMusicService {
             final sunoData = responseData['sunoData'] as List;
 
             if (sunoData.isNotEmpty) {
-              Logger.log('✅ Track generation completed!');
+              Logger.log('✅ Track generation completed successfully!');
 
               // Use the first track from sunoData
               final firstTrack = sunoData[0] as Map<String, dynamic>;
-              Logger.log('📊 Raw kie.ai track data: $firstTrack');
-              Logger.log('📊 Track title: ${firstTrack['title']}');
-              Logger.log('📊 Track audioUrl: ${firstTrack['audioUrl']}');
-              Logger.log('📊 Track duration: ${firstTrack['duration']}');
+              Logger.log('🎵 Track Details:');
+              Logger.log('   Title: ${firstTrack['title']}');
+              Logger.log('   Audio URL: ${firstTrack['audioUrl']}');
+              Logger.log('   Duration: ${firstTrack['duration']}s');
+              Logger.log('   Image URL: ${firstTrack['imageUrl']}');
 
-              // Convert to GeneratedTrack format using correct kie.ai response structure
+              // Convert to GeneratedTrack format using actual kie.ai response structure
               final trackData = {
                 'id': data['data']['taskId'],
-                'title': firstTrack['title'] ?? 'Untitled Track',
-                'artist': 'AI Generated',
-                'genre': originalGenre ?? 'AI Music', // Use original genre from request
-                'mood': originalMood ?? 'Generated', // Use original mood from request
-                'duration': (firstTrack['duration']?.toDouble() ?? 120.0).round(),
+                'title': firstTrack['title'] ?? 'AI Generated Track',
+                'artist': 'AI Artist',
+                'genre': originalGenre ?? 'AI Music',
+                'mood': originalMood ?? 'Generated',
+                'duration': (firstTrack['duration'] is num) ? firstTrack['duration'].toInt() : 120,
                 'audio_url': firstTrack['audioUrl'] ?? '',
                 'cover_image_url': firstTrack['imageUrl'] ?? '',
-                'created_at': firstTrack['createTime'] != null
-                  ? DateTime.fromMillisecondsSinceEpoch((firstTrack['createTime'] * 1000).toInt()).toIso8601String()
-                  : DateTime.now().toIso8601String(),
+                'created_at': DateTime.now().toIso8601String(),
                 'metadata': {
                   'prompt': firstTrack['prompt'] ?? '',
                   'tags': firstTrack['tags'] ?? '',
                   'sunoId': firstTrack['id'] ?? '',
                   'streamAudioUrl': firstTrack['streamAudioUrl'] ?? '',
+                  'taskId': taskId,
                 }
               };
 
               final track = GeneratedTrack.fromJson(trackData);
 
-            // Save completed track to database and notify UI
-            try {
-              final aiTrack = AITrack(
-                id: taskId, // Use original taskId to replace processing track
-                title: track.title,
-                artist: track.artist,
-                genre: track.genre,
-                mood: track.mood,
-                duration: Duration(seconds: track.duration),
-                audioUrl: track.audioUrl,
-                coverArtUrl: track.coverImageUrl,
-                createdAt: DateTime.now(),
-                isInstrumental: false,
-                lyrics: null,
-                isProcessing: false,
-                processingCompleted: true,
-                processingStatus: 'Completed',
-              );
+            // Create AITrack and notify UI callback
+            final aiTrack = AITrack(
+              id: taskId,
+              title: track.title,
+              artist: track.artist,
+              genre: track.genre,
+              mood: track.mood,
+              duration: Duration(seconds: track.duration),
+              audioUrl: track.audioUrl,
+              coverArtUrl: track.coverImageUrl,
+              createdAt: DateTime.now(),
+              isInstrumental: false,
+              lyrics: null,
+              isProcessing: false,
+              processingCompleted: true,
+              processingStatus: 'Completed',
+              metadata: track.metadata,
+            );
 
-              await TrackDatabaseService().saveTrack(aiTrack);
-              Logger.log('✅ Track saved to database: ${track.title}');
-
-              // Notify UI to update processing track with completed track
-              if (onTrackCompleted != null) {
-                onTrackCompleted(aiTrack);
-              }
-            } catch (e) {
-              Logger.log('❌ Failed to save track to Supabase: $e');
-              // Continue anyway - track is still usable
+            // Notify UI callback that track is completed
+            if (onTrackCompleted != null) {
+              onTrackCompleted(aiTrack);
             }
+
+            Logger.log('✅ Track processing completed: ${track.title}');
 
             return track;
             }
@@ -383,280 +354,46 @@ class AIMusicService {
     throw Exception('Track generation timed out after ${maxAttempts * 10} seconds. Please try again.');
   }
 
-  /// Extend existing track
-  Future<ExtendedTrack> extendTrack({
-    required String audioUrl,
-    required int extendDuration,
-    String? style,
-    bool instrumental = false,
-  }) async {
-    try {
-      final requestData = {
-        'audio_url': audioUrl,
-        'extend_duration': extendDuration,
-        'continuation_style': 'seamless',
-        'style': style ?? 'consistent',
-        'instrumental': instrumental,
-      };
+  /// Format prompt according to kie.ai best practices
+  String _formatPromptForKieAi(String prompt, String? genre, String? mood, String? style, String? lyrics) {
+    var formattedPrompt = prompt.trim();
 
-      final dio = await _dioInstance;
-      final response = await dio.post(
-        '/suno/extend',
-        data: requestData,
-        options: Options(
-          responseType: ResponseType.json,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = response.data;
-        return ExtendedTrack.fromJson(data);
-      } else {
-        throw ApiException('Failed to extend track: ${response.statusMessage}');
-      }
-    } on DioException catch (e) {
-      Logger.log('Error extending track: $e');
-      throw ApiException('Track extension failed: ${e.message}');
+    // Add style and mood context if provided
+    if (mood != null && mood.isNotEmpty) {
+      formattedPrompt = '$mood $formattedPrompt';
     }
-  }
-
-  /// Generate lyrics for music
-  Future<String> generateLyrics({
-    required String theme,
-    required String genre,
-    String? style,
-    String? mood,
-    String? artist,
-    String? language = 'english',
-    int length = 200,
-    bool includeChorus = true,
-    bool includeBridge = true,
-  }) async {
-    try {
-      final prompt = '''
-        Generate ${includeChorus ? 'song lyrics' : 'poetic lyrics'} with the following specifications:
-
-        Theme: "$theme"
-        Genre: "$genre"
-        Style: ${style ?? 'modern'}
-        Mood: ${mood ?? 'emotional'}
-        Language: $language
-        Length: approximately $length words
-        ${includeChorus ? 'Include a catchy chorus' : ''}
-        ${includeBridge ? 'Include a musical bridge' : ''}
-        ${artist != null ? 'In the style of $artist' : ''}
-
-        The lyrics should be emotionally engaging and suitable for music composition.
-        Make it poetic and rhythmic with natural flow.
-
-        Format the output as clean lyrics without extra explanations.
-      ''';
-
-      final requestData = {
-        'prompt': prompt,
-        'model': 'gpt-4',
-        'max_tokens': 1000,
-        'temperature': 0.8,
-        'top_p': 0.9,
-        'frequency_penalty': 0.7,
-        'presence_penalty': 0.3,
-      };
-
-      final dio = await _dioInstance;
-      final response = await dio.post(
-        '/llm/generate',
-        data: requestData,
-        options: Options(
-          responseType: ResponseType.json,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = response.data;
-        return data['choices'][0]['message']['content'];
-      } else {
-        throw ApiException('Failed to generate lyrics: ${response.statusMessage}');
-      }
-    } on DioException catch (e) {
-      Logger.log('Error generating lyrics: $e');
-      throw ApiException('Lyrics generation failed: ${e.message}');
-    }
-  }
-
-  /// Separate audio stems (vocals, drums, bass, other)
-  Future<AudioStemsResponse> separateAudioStems({
-    required String audioUrl,
-  }) async {
-    try {
-      final requestData = {
-        'audio_url': audioUrl,
-        'output_format': 'mp3',
-        'quality': 'high',
-        'stems': ['vocals', 'drums', 'bass', 'other'],
-      };
-
-      final dio = await _dioInstance;
-      final response = await dio.post(
-        '/audio/separate-stems',
-        data: requestData,
-        options: Options(
-          responseType: ResponseType.json,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = response.data;
-        return AudioStemsResponse.fromJson(data);
-      } else {
-        throw ApiException('Failed to separate stems: ${response.statusMessage}');
-      }
-    } on DioException catch (e) {
-      Logger.log('Error separating stems: $e');
-      throw ApiException('Stem separation failed: ${e.message}');
-    }
-  }
-
-  /// Generate AI avatar/cover art for track
-  Future<String> generateCoverArt({
-    required String description,
-    String? genre,
-    String? mood,
-    String style = 'album_cover',
-    String aspectRatio = '1:1',
-  }) async {
-    try {
-      final prompt = '''
-        Generate an album cover image with the following specifications:
-
-        Description: "$description"
-        ${genre != null ? 'Music genre: $genre' : ''}
-        ${mood != null ? 'Mood: $mood' : ''}
-        Style: $style
-        Aspect ratio: $aspectRatio
-
-        Create a professional album cover that would work well for music streaming platforms.
-        Use vibrant colors and modern design principles.
-        No text in the image, just the visual artwork.
-      ''';
-
-      final requestData = {
-        'prompt': prompt,
-        'model': '4o-image',
-        'style': style,
-        'aspect_ratio': aspectRatio,
-        'quality': 'high',
-        'size': '1024x1024',
-      };
-
-      final dio = await _dioInstance;
-      final response = await dio.post(
-        '/image/generate',
-        data: requestData,
-        options: Options(
-          responseType: ResponseType.json,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = response.data;
-        return data['data'][0]['url'];
-      } else {
-        throw ApiException('Failed to generate cover art: ${response.statusMessage}');
-      }
-    } on DioException catch (e) {
-      Logger.log('Error generating cover art: $e');
-      throw ApiException('Cover art generation failed: ${e.message}');
-    }
-  }
-
-  /// Get available models and capabilities
-  Future<ModelCapabilities> getCapabilities() async {
-    try {
-      final dio = await _dioInstance;
-      final response = await dio.get(
-        '/capabilities',
-        options: Options(
-          responseType: ResponseType.json,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        return ModelCapabilities.fromJson(response.data);
-      } else {
-        throw ApiException('Failed to get capabilities: ${response.statusMessage}');
-      }
-    } catch (e) {
-      Logger.log('Error getting capabilities: $e');
-      // Return default capabilities if API call fails
-      return ModelCapabilities.getDefault();
-    }
-  }
-
-  /// Format the prompt with additional parameters
-  String _formatPrompt(String prompt, String? genre, String? mood, String? style) {
-    String formattedPrompt = prompt;
 
     if (genre != null && genre.isNotEmpty) {
-      formattedPrompt += ' in $genre style';
+      formattedPrompt = '$genre $formattedPrompt';
     }
 
-    if (mood != null && mood.isNotEmpty) {
-      formattedPrompt += ' with $mood mood';
+    if (style != null && style.isNotEmpty && style != 'modern') {
+      formattedPrompt = '$formattedPrompt with $style style';
     }
 
-    if (style != null && style.isNotEmpty) {
-      formattedPrompt += ' in $style style';
+    // Add custom lyrics if provided
+    if (lyrics != null && lyrics.isNotEmpty) {
+      formattedPrompt = '$formattedPrompt. Lyrics: $lyrics';
     }
 
     return formattedPrompt;
   }
 
-  /// Validate generation parameters
-  bool validateParameters({
-    required String prompt,
-    String? genre,
-    int? duration,
-  }) {
-    if (prompt.trim().isEmpty) return false;
+  /// Generate a title from prompt and genre
+  String _generateTitle(String prompt, String? genre) {
+    // Take first 3-4 words from prompt and capitalize
+    final words = prompt.split(' ').take(4);
+    var title = words.map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : '').join(' ');
 
-    if (prompt.length < 10) return false;
-
-    if (genre != null && !supportedGenres.contains(genre.toLowerCase())) {
-      return false;
+    // Limit to 80 characters as per kie.ai requirements
+    if (title.length > 80) {
+      title = title.substring(0, 77) + '...';
     }
 
-    if (duration != null && (duration < 10 || duration > 600)) {
-      return false;
-    }
-
-    return true;
+    return title.isNotEmpty ? title : 'AI Generated Track';
   }
 
-  /// Get supported genres list
-  List<String> getSupportedGenres({bool arabicMode = false}) {
-    if (arabicMode) {
-      return List.from(arabicGenres);
-    }
-    return List.from(supportedGenres);
-  }
-
-  /// Get all genres (regular + Arabic)
-  List<String> getAllGenres() {
-    return [...supportedGenres, ...arabicGenres];
-  }
-
-  /// Get supported moods list
-  List<String> getSupportedMoods() => List.from(supportedMoods);
-
-  /// Get supported languages list
-  List<String> getSupportedLanguages() => List.from(supportedLanguages);
-
-  /// Dispose resources
-  void dispose() {
-    _dio?.close();
-  }
-
-  }
+}
 
 /// Generated track data model
 class GeneratedTrack {

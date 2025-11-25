@@ -51,19 +51,23 @@ class _TrackListWidgetState extends State<TrackListWidget> {
 
   Future<void> _loadTracks() async {
     try {
-      // First, clear any existing mock tracks to ensure clean state
-      await _databaseService.clearAllTracks();
+      setState(() {
+        _isLoading = true;
+      });
 
       final tracks = await _databaseService.getAllTracks();
       setState(() {
         _tracks.clear();
         _tracks.addAll(tracks);
+        _isLoading = false;
       });
+
+      Logger.log('✅ Loaded ${tracks.length} tracks from database');
     } catch (e) {
-      Logger.log('Error loading tracks: $e');
-      // No fallback to mock tracks - show empty state when database fails
+      Logger.log('❌ Error loading tracks: $e');
       setState(() {
         _tracks.clear();
+        _isLoading = false;
       });
     }
   }

@@ -461,10 +461,7 @@ class TrackDatabaseService {
         );
       }).toList();
 
-      // If no local tracks, return mock data
-      if (tracks.isEmpty) {
-        return [];
-      }
+      // Return actual tracks (no mock data fallback)
 
       Logger.log('Loaded ${tracks.length} tracks from local storage');
       return tracks;
