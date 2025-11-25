@@ -73,7 +73,7 @@ void main() async {
 
         print('🎵 Track completed:');
         print('   Title: ${trackData['title']}');
-        print('   Audio URL: ${trackData['audioUrl']}');
+        print('   Audio URL: ${trackData['audio_url'] ?? trackData['audioUrl']}');
         print('   Duration: ${trackData['duration']}');
 
         // Update Supabase database with completed track
@@ -139,12 +139,12 @@ bool _isValidKieAiWebhook(Map<String, dynamic> payload) {
 /// Update Supabase track with completed data
 Future<void> _updateSupabaseTrack(String taskId, Map<String, dynamic> trackData) async {
   try {
-    // Create the updated track data
+    // Create the updated track data with correct field mapping
     final updatedTrackData = {
       'title': trackData['title'] ?? 'AI Generated Track',
       'artist': 'AI Artist',
-      'audio_url': trackData['audioUrl'] ?? '',
-      'cover_art_url': trackData['imageUrl'] ?? '',
+      'audio_url': trackData['audio_url'] ?? trackData['audioUrl'] ?? '',
+      'cover_art_url': trackData['image_url'] ?? trackData['imageUrl'] ?? '',
       'duration_seconds': (trackData['duration'] is num) ? trackData['duration'].toInt() : 120,
       'is_instrumental': false,
       'metadata': {
@@ -152,7 +152,7 @@ Future<void> _updateSupabaseTrack(String taskId, Map<String, dynamic> trackData)
         'prompt': trackData['prompt'] ?? '',
         'model_name': trackData['model_name'] ?? 'V5',
         'tags': trackData['tags'] ?? '',
-        'streamAudioUrl': trackData['streamAudioUrl'] ?? '',
+        'streamAudioUrl': trackData['stream_audio_url'] ?? trackData['streamAudioUrl'] ?? '',
         'webhookReceived': true,
         'completedAt': DateTime.now().toIso8601String(),
       },

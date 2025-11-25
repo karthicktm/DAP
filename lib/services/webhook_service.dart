@@ -104,7 +104,7 @@ class WebhookService {
 
         Logger.log('🎵 Processing completed track from webhook:');
         Logger.log('   Title: ${firstTrack['title']}');
-        Logger.log('   Audio URL: ${firstTrack['audioUrl']}');
+        Logger.log('   Audio URL: ${firstTrack['audio_url'] ?? firstTrack['audioUrl']}');
         Logger.log('   Duration: ${firstTrack['duration']}');
 
         // Update the existing processing track in Supabase
@@ -151,8 +151,8 @@ class WebhookService {
         genre: trackData['tags'] ?? 'AI Music',
         mood: 'Generated',
         duration: Duration(seconds: (trackData['duration'] is num) ? trackData['duration'].toInt() : 120),
-        audioUrl: trackData['audioUrl'] ?? '',
-        coverArtUrl: trackData['imageUrl'] ?? '',
+        audioUrl: trackData['audio_url'] ?? trackData['audioUrl'] ?? '',
+        coverArtUrl: trackData['image_url'] ?? trackData['imageUrl'] ?? '',
         createdAt: DateTime.parse(trackData['createTime'] ?? DateTime.now().toIso8601String()),
         isInstrumental: false,
         lyrics: null,
@@ -165,7 +165,7 @@ class WebhookService {
           'prompt': trackData['prompt'] ?? '',
           'model_name': trackData['model_name'] ?? 'V5',
           'tags': trackData['tags'] ?? '',
-          'streamAudioUrl': trackData['streamAudioUrl'] ?? '',
+          'streamAudioUrl': trackData['stream_audio_url'] ?? trackData['streamAudioUrl'] ?? '',
           'webhookReceived': true,
           'completedAt': DateTime.now().toIso8601String(),
         },

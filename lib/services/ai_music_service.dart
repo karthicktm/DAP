@@ -110,7 +110,12 @@ class AIMusicService {
     bool instrumental = false,
     String? vocalGender,
     double temperature = 0.7,
-    String? model = 'suno-v5',
+    String? model = 'V5',
+    String? personaId,
+    double? styleWeight,
+    double? weirdnessConstraint,
+    double? audioWeight,
+    String? negativeTags,
     Function(String taskId)? onTaskIdReceived,
     Function(AITrack completedTrack)? onTrackCompleted,
   }) async {
@@ -121,7 +126,7 @@ class AIMusicService {
       final requestData = {
         'prompt': formattedPrompt,
         'instrumental': instrumental,
-        'model': 'V5',
+        'model': model ?? 'V5',
         'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music', // Webhook for real-time updates
       };
 
@@ -132,6 +137,26 @@ class AIMusicService {
         requestData['title'] = _generateTitle(prompt, genre);
       } else {
         requestData['customMode'] = false;
+      }
+
+      // Add v5-specific parameters if provided
+      if (personaId != null && personaId.isNotEmpty) {
+        requestData['personaId'] = personaId;
+      }
+      if (styleWeight != null) {
+        requestData['styleWeight'] = styleWeight.clamp(0.0, 1.0);
+      }
+      if (weirdnessConstraint != null) {
+        requestData['weirdnessConstraint'] = weirdnessConstraint.clamp(0.0, 1.0);
+      }
+      if (audioWeight != null) {
+        requestData['audioWeight'] = audioWeight.clamp(0.0, 1.0);
+      }
+      if (negativeTags != null && negativeTags.isNotEmpty) {
+        requestData['negativeTags'] = negativeTags;
+      }
+      if (vocalGender != null && vocalGender.isNotEmpty) {
+        requestData['vocalGender'] = vocalGender;
       }
 
       Logger.log('🎵 Sending music generation request:');

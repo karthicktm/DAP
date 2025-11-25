@@ -34,7 +34,15 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
   bool _includeVocals = true;
   bool _generateLyrics = false;
   bool _isArabicMode = false;
+  bool _showAdvancedOptions = false;
   String? _currentTaskId; // Store current generation taskId
+
+  // v5 Advanced Parameters
+  double _styleWeight = 0.65;
+  double _weirdnessConstraint = 0.5;
+  double _audioWeight = 0.5;
+  String _negativeTags = '';
+  String _vocalGender = '';
 
   @override
   void dispose() {
@@ -304,6 +312,113 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
                 ),
               ],
 
+              const SizedBox(height: 20),
+
+              // Advanced Options Toggle
+              _buildOptionToggle('Show Advanced Options (v5)', _showAdvancedOptions, (value) {
+                setState(() => _showAdvancedOptions = value);
+              }),
+
+              // Advanced v5 Options
+              if (_showAdvancedOptions) ...[
+                const SizedBox(height: 16),
+                _buildSectionHeader('Advanced v5 Options', Icons.tune),
+                const SizedBox(height: 12),
+
+                // Style Weight
+                _buildSliderOption(
+                  'Style Weight',
+                  'How strongly to follow the style specification',
+                  _styleWeight,
+                  (value) => setState(() => _styleWeight = value),
+                ),
+
+                // Weirdness Constraint
+                _buildSliderOption(
+                  'Creativity Level',
+                  'Controls experimental and creative deviation',
+                  _weirdnessConstraint,
+                  (value) => setState(() => _weirdnessConstraint = value),
+                ),
+
+                // Audio Weight
+                _buildSliderOption(
+                  'Audio Focus',
+                  'Balance weight for audio features vs other factors',
+                  _audioWeight,
+                  (value) => setState(() => _audioWeight = value),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Vocal Gender Selection
+                Text(
+                  'Vocal Gender (optional)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('Any'),
+                      selected: _vocalGender == '',
+                      onSelected: (selected) {
+                        if (selected) setState(() => _vocalGender = '');
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Male'),
+                      selected: _vocalGender == 'm',
+                      onSelected: (selected) {
+                        if (selected) setState(() => _vocalGender = 'm');
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Female'),
+                      selected: _vocalGender == 'f',
+                      onSelected: (selected) {
+                        if (selected) setState(() => _vocalGender = 'f');
+                      },
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // Negative Tags
+                TextFormField(
+                  initialValue: _negativeTags,
+                  decoration: InputDecoration(
+                    labelText: 'Exclude Styles (Optional)',
+                    hintText: 'e.g., Heavy Metal, Upbeat Drums',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF8B5CF6)),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF252641).withOpacity(0.5),
+                    labelStyle: TextStyle(color: Colors.white70),
+                    hintStyle: TextStyle(color: Colors.white38),
+                  ),
+                  style: TextStyle(color: Colors.white),
+                  onChanged: (value) => _negativeTags = value,
+                ),
+              ],
+
               const SizedBox(height: 24),
 
               // Generate Button
@@ -436,6 +551,71 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
     );
   }
 
+  Widget _buildSliderOption(String title, String description, double value, Function(double) onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  value.toStringAsFixed(2),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: const Color(0xFF8B5CF6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white54,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF8B5CF6),
+              inactiveTrackColor: const Color(0xFF8B5CF6).withOpacity(0.3),
+              thumbColor: const Color(0xFF8B5CF6),
+              overlayColor: const Color(0xFF8B5CF6).withOpacity(0.2),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              trackHeight: 3,
+            ),
+            child: Slider(
+              value: value,
+              min: 0.0,
+              max: 1.0,
+              divisions: 100,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _generateMusic() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -456,6 +636,13 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
           : null,
         instrumental: !_includeVocals,
         language: _isArabicMode ? 'arabic' : 'english',
+        model: 'V5',
+        // v5 Advanced Parameters
+        styleWeight: _showAdvancedOptions ? _styleWeight : null,
+        weirdnessConstraint: _showAdvancedOptions ? _weirdnessConstraint : null,
+        audioWeight: _showAdvancedOptions ? _audioWeight : null,
+        vocalGender: _showAdvancedOptions && _vocalGender.isNotEmpty ? _vocalGender : null,
+        negativeTags: _showAdvancedOptions && _negativeTags.isNotEmpty ? _negativeTags : null,
       );
 
       // Webhook-based system: processing track is already saved to database

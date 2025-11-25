@@ -74,6 +74,46 @@ class TrackDatabaseService {
     return _isInitialized;
   }
 
+  /// Listen to real-time track updates from Supabase
+  Stream<List<AITrack>>? listenToTrackUpdates() {
+    if (!isSupabaseAvailable) {
+      Logger.log('⚠️ Supabase not available, cannot listen to real-time updates');
+      return null;
+    }
+
+    try {
+      return _supabase
+          .from('tracks')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false)
+          .map((data) => data.map((json) => _trackFromJson(json)).toList());
+    } catch (e) {
+      Logger.log('❌ Error setting up real-time listener: $e');
+      return null;
+    }
+  }
+
+  /// Convert Supabase JSON to AITrack object
+  AITrack _trackFromJson(Map<String, dynamic> json) {
+    return AITrack(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Unknown Track',
+      artist: json['artist']?.toString() ?? 'AI Artist',
+      genre: json['genre']?.toString() ?? 'Unknown',
+      mood: json['mood']?.toString() ?? 'Unknown',
+      duration: Duration(seconds: json['duration_seconds']?.toInt() ?? 120),
+      audioUrl: json['audio_url']?.toString() ?? '',
+      coverArtUrl: json['cover_art_url']?.toString(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      isInstrumental: json['is_instrumental']?.toString().toLowerCase() == 'true',
+      lyrics: json['lyrics']?.toString(),
+      metadata: Map<String, dynamic>.from(json['metadata'] ?? {}),
+      isProcessing: json['is_processing']?.toString().toLowerCase() == 'true',
+      processingStatus: json['processing_status']?.toString(),
+      processingCompleted: json['processing_completed']?.toString().toLowerCase() == 'true',
+    );
+  }
+
   /// Save a generated track to the database
   Future<bool> saveTrack(AITrack track) async {
     if (!isSupabaseAvailable) {
