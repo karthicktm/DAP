@@ -6,6 +6,7 @@ import 'providers/settings_provider.dart';
 import 'screens/settings_screen.dart';
 import 'screens/ai_music_studio_screen_simple.dart';
 import 'widgets/track_list_widget.dart';
+import 'services/track_database_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,14 +14,13 @@ Future<void> main() async {
   // Load environment variables
   await dotenv.load(fileName: ".env");
 
-  // Initialize Supabase with placeholder values (will be updated from settings)
+  // Initialize Supabase using TrackDatabaseService (which handles env vars properly)
   try {
-    await Supabase.initialize(
-      url: 'https://placeholder.supabase.co',
-      anonKey: 'placeholder_anon_key',
-    );
+    // Import and initialize the proper service
+    final trackDb = TrackDatabaseService();
+    await trackDb.initialize();
   } catch (e) {
-    print('Supabase initialization failed (will be configured from settings): $e');
+    print('Supabase initialization failed (fallback to local storage): $e');
   }
 
   runApp(

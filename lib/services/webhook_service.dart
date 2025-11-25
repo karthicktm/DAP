@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../utils/logger.dart';
 import '../models/generated_track.dart';
-import '../services/supabase_service.dart';
+import '../services/track_database_service.dart';
+import '../models/ai_track.dart';
 
 /// Service to handle webhook callbacks and polling
 class WebhookService {
@@ -93,18 +94,25 @@ class WebhookService {
         if (trackData != null) {
           Logger.log('✅ Track received from webhook: ${trackData.title}');
 
-          // Save track to Supabase
+          // Save track to database
           try {
-            await SupabaseService.saveTrack(
+            final aiTrack = AITrack(
+              id: trackData.id,
               title: trackData.title,
-              audioUrl: trackData.audioUrl,
-              coverImageUrl: trackData.coverImageUrl,
+              artist: trackData.artist,
               genre: trackData.genre,
               mood: trackData.mood,
-              duration: trackData.duration,
+              duration: Duration(seconds: trackData.duration),
+              audioUrl: trackData.audioUrl,
+              coverArtUrl: trackData.coverImageUrl,
+              createdAt: DateTime.now(),
+              isInstrumental: false,
+              lyrics: null,
             );
 
-            Logger.log('✅ Track saved to Supabase: ${trackData.title}');
+            await TrackDatabaseService().saveTrack(aiTrack);
+
+            Logger.log('✅ Track saved to database: ${trackData.title}');
             _notifyTrackCompleted(trackData);
           } catch (e) {
             Logger.log('❌ Failed to save track to Supabase: $e');
