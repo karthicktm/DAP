@@ -887,7 +887,7 @@ class TrackDetailsSheet extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    // TODO: Play track
+                    _playTrack(track);
                   },
                   icon: Icon(Icons.play_arrow_rounded),
                   label: Text('Play'),

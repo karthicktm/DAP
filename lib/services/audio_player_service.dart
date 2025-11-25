@@ -61,6 +61,18 @@ class AudioPlayerService {
     try {
       _currentTrack = track;
 
+      if (kDebugMode) {
+        print('🎵 Attempting to play: ${track.title} - ${track.artist}');
+        print('📍 Audio URL: ${track.audioUrl}');
+        print('🔍 URL length: ${track.audioUrl.length}');
+        print('🔍 URL starts with: ${track.audioUrl.substring(0, track.audioUrl.length > 20 ? 20 : track.audioUrl.length)}...');
+      }
+
+      // Check if audio URL is valid
+      if (track.audioUrl.isEmpty) {
+        throw Exception('Track has no audio URL');
+      }
+
       // Set the audio source - handle both assets and URLs
       if (track.audioUrl.startsWith('assets/')) {
         await _audioPlayer.setAsset(track.audioUrl);
@@ -72,13 +84,14 @@ class AudioPlayerService {
       await _audioPlayer.play();
 
       if (kDebugMode) {
-        print('🎵 Playing: ${track.title} - ${track.artist}');
-        print('📍 Source: ${track.audioUrl}');
+        print('✅ Successfully started playback: ${track.title}');
       }
     } catch (e) {
       if (kDebugMode) {
         print('❌ Error playing track: $e');
         print('📍 Audio URL: ${track.audioUrl}');
+        print('🔍 Track processing: ${track.isProcessing}');
+        print('🔍 Track completed: ${track.processingCompleted}');
       }
       throw Exception('Failed to play track: $e');
     }
