@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/ai_music_service.dart';
 import '../models/ai_track.dart';
+import '../utils/logger.dart';
 import 'glassmorphic_card.dart';
 
 class MusicGenerationForm extends StatefulWidget {
@@ -486,31 +487,16 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
             widget.onGenerationComplete(processingTrack);
           });
         },
+        onTrackCompleted: (completedTrack) {
+          // Update UI when polling completes - replace processing track with completed track
+          Logger.log('🎵 Polling completed, updating UI with completed track');
+          widget.onGenerationComplete(completedTrack);
+        },
       );
 
-      // Update processing track to completed status - using original taskId to maintain same track
-      final completedTrack = AITrack(
-        id: _currentTaskId ?? generatedTrack.id, // Use stored taskId to replace the processing track
-        title: generatedTrack.title,
-        artist: generatedTrack.artist,
-        genre: generatedTrack.genre,
-        mood: generatedTrack.mood,
-        duration: Duration(seconds: generatedTrack.duration),
-        audioUrl: generatedTrack.audioUrl,
-        coverArtUrl: generatedTrack.coverImageUrl.isNotEmpty
-          ? generatedTrack.coverImageUrl
-          : null,
-        createdAt: generatedTrack.createdAt,
-        isInstrumental: !_includeVocals,
-        lyrics: _generateLyrics ? generatedTrack.metadata['lyrics'] as String? : null,
-        metadata: generatedTrack.metadata,
-        isProcessing: false,
-        processingCompleted: true,
-        processingStatus: 'Completed',
-      );
-
-      // Update the existing processing track (same ID) with completed data
-      widget.onGenerationComplete(completedTrack);
+      // Track completion is handled by the AI service during polling
+      // The processing track will be automatically updated when polling completes
+      Logger.log('🎵 Music generation completed successfully');
     } catch (e) {
       // Create error track with same parameters as would have been used for processing
       final errorTrack = AITrack(

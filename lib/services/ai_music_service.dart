@@ -112,6 +112,7 @@ class AIMusicService {
     double temperature = 0.7,
     String? model = 'suno-v5',
     Function(String taskId)? onTaskIdReceived,
+    Function(AITrack completedTrack)? onTrackCompleted,
   }) async {
     try {
       final requestData = {
@@ -207,7 +208,7 @@ class AIMusicService {
 
           Logger.log('🔄 About to start polling for taskId: $taskId');
           // Poll for the actual track result
-          return await _pollForTrackResult(taskId, apiKey);
+          return await _pollForTrackResult(taskId, apiKey, onTrackCompleted);
         }
 
         // Try to parse as complete track
@@ -233,7 +234,7 @@ class AIMusicService {
   }
 
   /// Poll for track result using taskId
-  Future<GeneratedTrack> _pollForTrackResult(String taskId, String apiKey) async {
+  Future<GeneratedTrack> _pollForTrackResult(String taskId, String apiKey, Function(AITrack)? onTrackCompleted) async {
     final dio = await _dioInstance;
 
     Logger.log('Starting to poll for track result with taskId: $taskId');
@@ -302,10 +303,10 @@ class AIMusicService {
 
               final track = GeneratedTrack.fromJson(trackData);
 
-            // Save completed track to database
+            // Save completed track to database and notify UI
             try {
               final aiTrack = AITrack(
-                id: track.id,
+                id: taskId, // Use original taskId to replace processing track
                 title: track.title,
                 artist: track.artist,
                 genre: track.genre,
@@ -316,10 +317,18 @@ class AIMusicService {
                 createdAt: DateTime.now(),
                 isInstrumental: false,
                 lyrics: null,
+                isProcessing: false,
+                processingCompleted: true,
+                processingStatus: 'Completed',
               );
 
               await TrackDatabaseService().saveTrack(aiTrack);
               Logger.log('✅ Track saved to database: ${track.title}');
+
+              // Notify UI to update processing track with completed track
+              if (onTrackCompleted != null) {
+                onTrackCompleted(aiTrack);
+              }
             } catch (e) {
               Logger.log('❌ Failed to save track to Supabase: $e');
               // Continue anyway - track is still usable
