@@ -228,7 +228,7 @@ class AIMusicService {
             coverImageUrl: '',
             duration: duration,
             createdAt: DateTime.now(),
-            metadata: processingTrack.metadata,
+            metadata: processingTrack.metadata ?? {},
           );
         }
 
