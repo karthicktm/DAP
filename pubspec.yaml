@@ -46,7 +46,7 @@ dependencies:
   # Webhook Server Dependencies
   shelf: ^1.4.1
   shelf_router: ^1.1.4
-  shelf_cors_headers: ^0.1.7
+  shelf_cors_headers: ^0.1.5
 
   # Storage & Caching
   cached_network_image: ^3.4.1
