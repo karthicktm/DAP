@@ -241,8 +241,11 @@ class AIMusicService {
             onTrackCompleted(processingTrack);
           }
 
+          // Start polling for status updates as webhook fallback
+          _startPollingForTrackCompletion(taskId, onTrackCompleted);
+
           // Return a mock generated track for UI compatibility
-          // Real track will be updated by webhook
+          // Real track will be updated by webhook or polling
           return GeneratedTrack(
             id: taskId,
             title: processingTrack.title,
@@ -317,6 +320,151 @@ class AIMusicService {
     }
 
     return title.isNotEmpty ? title : 'AI Generated Track';
+  }
+
+  /// Poll kie.ai for track completion status as webhook fallback
+  Future<void> _startPollingForTrackCompletion(String taskId, Function(AITrack)? onTrackCompleted) async {
+    Logger.log('🔄 Starting polling fallback for taskId: $taskId');
+
+    int attempts = 0;
+    const maxAttempts = 20; // 10 minutes max (30s intervals)
+    const pollInterval = Duration(seconds: 30);
+
+    while (attempts < maxAttempts) {
+      await Future.delayed(pollInterval);
+      attempts++;
+
+      try {
+        Logger.log('🔍 Polling attempt $attempts for taskId: $taskId');
+
+        final dio = await _dioInstance;
+        final response = await dio.get(
+          '${ApiConstants.musicStatus}/$taskId',
+          options: Options(responseType: ResponseType.json),
+        );
+
+        if (response.statusCode == 200 && response.data != null) {
+          final data = response.data;
+          Logger.log('📋 Status response: $data');
+
+          // Check if generation is complete
+          if (data is Map && data.containsKey('data')) {
+            final trackDataList = data['data'] as List?;
+
+            if (trackDataList != null && trackDataList.isNotEmpty) {
+              final trackData = trackDataList[0] as Map<String, dynamic>;
+              final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'];
+
+              if (audioUrl != null && audioUrl.toString().isNotEmpty) {
+                Logger.log('✅ Track completed via polling: $audioUrl');
+
+                // Update the track in database
+                await _updateTrackFromPolling(taskId, trackData);
+
+                // Notify callback if provided
+                if (onTrackCompleted != null) {
+                  final completedTrack = await _createCompletedTrack(taskId, trackData);
+                  onTrackCompleted(completedTrack);
+                }
+
+                Logger.log('🎵 Polling completed successfully for taskId: $taskId');
+                return;
+              }
+            }
+          }
+        }
+
+        Logger.log('⏳ Track still processing... (attempt $attempts/$maxAttempts)');
+
+      } catch (e) {
+        Logger.log('❌ Polling error (attempt $attempts): $e');
+
+        // Continue polling unless it's the last attempt
+        if (attempts >= maxAttempts) {
+          Logger.log('🚫 Polling failed after $maxAttempts attempts for taskId: $taskId');
+          break;
+        }
+      }
+    }
+
+    Logger.log('⏰ Polling timeout for taskId: $taskId after $attempts attempts');
+  }
+
+  /// Update track from polling data
+  Future<void> _updateTrackFromPolling(String taskId, Map<String, dynamic> trackData) async {
+    try {
+      final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'] ?? '';
+      final imageUrl = trackData['image_url'] ?? trackData['imageUrl'] ?? '';
+
+      final updateData = {
+        'audio_url': audioUrl,
+        'cover_art_url': imageUrl,
+        'title': trackData['title'] ?? 'AI Generated Track',
+        'duration_seconds': (trackData['duration'] is num) ? trackData['duration'].toInt() : 120,
+        'is_processing': false,
+        'processing_completed': true,
+        'processing_status': 'Completed via polling',
+        'updated_at': DateTime.now().toIso8601String(),
+        'metadata': {
+          'sunoId': trackData['id'] ?? '',
+          'prompt': trackData['prompt'] ?? '',
+          'model_name': trackData['model_name'] ?? 'V5',
+          'tags': trackData['tags'] ?? '',
+          'streamAudioUrl': trackData['stream_audio_url'] ?? trackData['streamAudioUrl'] ?? '',
+          'completedViaPolling': true,
+          'completedAt': DateTime.now().toIso8601String(),
+          'originalTaskId': taskId,
+        },
+      };
+
+      // Create updated track object and save it
+      final updatedTrack = AITrack(
+        id: taskId,
+        title: updateData['title'] as String,
+        artist: 'AI Artist',
+        genre: 'AI Music',
+        mood: 'Generated',
+        duration: Duration(seconds: updateData['duration_seconds'] as int),
+        audioUrl: updateData['audio_url'] as String,
+        coverArtUrl: updateData['cover_art_url'] as String?,
+        createdAt: DateTime.now(),
+        isInstrumental: false,
+        isProcessing: updateData['is_processing'] as bool,
+        processingStatus: updateData['processing_status'] as String,
+        processingCompleted: updateData['processing_completed'] as bool,
+        metadata: updateData['metadata'] as Map<String, dynamic>,
+      );
+
+      await TrackDatabaseService().saveTrack(updatedTrack);
+      Logger.log('✅ Track updated via polling: $taskId');
+
+    } catch (e) {
+      Logger.log('❌ Error updating track via polling: $e');
+    }
+  }
+
+  /// Create AITrack from completed data
+  Future<AITrack> _createCompletedTrack(String taskId, Map<String, dynamic> trackData) async {
+    return AITrack(
+      id: taskId,
+      title: trackData['title'] ?? 'AI Generated Track',
+      artist: 'AI Artist',
+      genre: 'AI Music',
+      mood: 'Generated',
+      duration: Duration(seconds: (trackData['duration'] is num) ? trackData['duration'].toInt() : 120),
+      audioUrl: trackData['audio_url'] ?? trackData['audioUrl'] ?? '',
+      coverArtUrl: trackData['image_url'] ?? trackData['imageUrl'],
+      createdAt: DateTime.now(),
+      isInstrumental: false,
+      isProcessing: false,
+      processingStatus: 'Completed via polling',
+      processingCompleted: true,
+      metadata: {
+        'sunoId': trackData['id'] ?? '',
+        'originalTaskId': taskId,
+        'completedViaPolling': true,
+      },
+    );
   }
 
 }

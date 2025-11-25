@@ -70,7 +70,17 @@ class AudioPlayerService {
 
       // Check if audio URL is valid
       if (track.audioUrl.isEmpty) {
-        throw Exception('Track has no audio URL');
+        // Check if track is still processing
+        if (track.isProcessing || !track.processingCompleted) {
+          throw Exception('Track is still being generated. Please wait for completion.');
+        } else {
+          throw Exception('Track has no audio URL. Generation may have failed.');
+        }
+      }
+
+      // Validate URL format
+      if (!track.audioUrl.startsWith('http') && !track.audioUrl.startsWith('assets/')) {
+        throw Exception('Invalid audio URL format: ${track.audioUrl}');
       }
 
       // Set the audio source - handle both assets and URLs
