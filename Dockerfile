@@ -1,25 +1,17 @@
 # Multi-stage Flutter Web build for Railway deployment
 FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
-# Create and switch to non-root user for security
-RUN useradd -m -s /bin/bash flutteruser
-
-USER flutteruser
-
-# Fix git ownership issue with Flutter SDK for the non-root user
-RUN git config --global --add safe.directory /sdks/flutter
-
 # Set working directory
 WORKDIR /app
 
-# Copy pubspec files with correct ownership
-COPY --chown=flutteruser:flutteruser pubspec.yaml pubspec.lock ./
+# Copy pubspec files
+COPY pubspec.yaml pubspec.lock ./
 
 # Get dependencies
 RUN flutter pub get
 
-# Copy source code with correct ownership
-COPY --chown=flutteruser:flutteruser . .
+# Copy source code
+COPY . .
 
 # Build web app for production with environment variables support
 ARG SUPABASE_URL
