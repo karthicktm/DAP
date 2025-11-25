@@ -208,7 +208,7 @@ class AIMusicService {
 
           Logger.log('🔄 About to start polling for taskId: $taskId');
           // Poll for the actual track result
-          return await _pollForTrackResult(taskId, apiKey, onTrackCompleted);
+          return await _pollForTrackResult(taskId, apiKey, onTrackCompleted, genre, mood);
         }
 
         // Try to parse as complete track
@@ -234,7 +234,7 @@ class AIMusicService {
   }
 
   /// Poll for track result using taskId
-  Future<GeneratedTrack> _pollForTrackResult(String taskId, String apiKey, Function(AITrack)? onTrackCompleted) async {
+  Future<GeneratedTrack> _pollForTrackResult(String taskId, String apiKey, Function(AITrack)? onTrackCompleted, String? originalGenre, String? originalMood) async {
     final dio = await _dioInstance;
 
     Logger.log('Starting to poll for track result with taskId: $taskId');
@@ -297,24 +297,24 @@ class AIMusicService {
               Logger.log('📊 Track audioUrl: ${firstTrack['audioUrl']}');
               Logger.log('📊 Track duration: ${firstTrack['duration']}');
 
-              // Convert to GeneratedTrack format
+              // Convert to GeneratedTrack format using correct kie.ai response structure
               final trackData = {
                 'id': data['data']['taskId'],
-                'title': firstTrack['title'] ?? 'Generated Track',
-                'artist': 'AI Artist',
-                'genre': 'Generated',
-                'mood': 'Generated',
-                'duration': (firstTrack['duration'] ?? 120).round(),
+                'title': firstTrack['title'] ?? 'Untitled Track',
+                'artist': 'AI Generated',
+                'genre': originalGenre ?? 'AI Music', // Use original genre from request
+                'mood': originalMood ?? 'Generated', // Use original mood from request
+                'duration': (firstTrack['duration']?.toDouble() ?? 120.0).round(),
                 'audio_url': firstTrack['audioUrl'] ?? '',
                 'cover_image_url': firstTrack['imageUrl'] ?? '',
-                'created_at': DateTime.fromMillisecondsSinceEpoch(
-                  firstTrack['createTime'] ?? DateTime.now().millisecondsSinceEpoch
-                ).toIso8601String(),
+                'created_at': firstTrack['createTime'] != null
+                  ? DateTime.fromMillisecondsSinceEpoch((firstTrack['createTime'] * 1000).toInt()).toIso8601String()
+                  : DateTime.now().toIso8601String(),
                 'metadata': {
                   'prompt': firstTrack['prompt'] ?? '',
                   'tags': firstTrack['tags'] ?? '',
-                  'model': firstTrack['modelName'] ?? '',
                   'sunoId': firstTrack['id'] ?? '',
+                  'streamAudioUrl': firstTrack['streamAudioUrl'] ?? '',
                 }
               };
 
