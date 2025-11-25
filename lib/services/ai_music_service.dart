@@ -120,26 +120,30 @@ class AIMusicService {
     Function(AITrack completedTrack)? onTrackCompleted,
   }) async {
     try {
-      // Format the prompt according to kie.ai best practices
-      final formattedPrompt = _formatPromptForKieAi(prompt, genre, mood, style, lyrics);
+      // Format the prompt with duration hint since API has no duration param
+      final formattedPrompt = _formatPromptForKieAi(prompt, genre, mood, style, lyrics, duration);
 
       final requestData = {
         'prompt': formattedPrompt,
         'instrumental': instrumental,
         'model': model ?? 'V5',
-        'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music', // Webhook for real-time updates
+        'customMode': true, // Enable advanced parameters for better control
+        'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
       };
 
-      // Add optional parameters
-      if (includeLyrics && lyrics != null && lyrics.isNotEmpty) {
-        requestData['customMode'] = true;
-        requestData['style'] = style ?? 'modern';
-        requestData['title'] = _generateTitle(prompt, genre);
-      } else {
-        requestData['customMode'] = false;
+      // Add style and title for better generation quality
+      if (style != null && style.isNotEmpty) {
+        requestData['style'] = style;
+      } else if (genre != null && genre.isNotEmpty) {
+        requestData['style'] = genre;
+      } else if (mood != null && mood.isNotEmpty) {
+        requestData['style'] = mood;
       }
 
-      // Add v5-specific parameters if provided
+      // Generate a descriptive title
+      requestData['title'] = _generateTitle(prompt, genre);
+
+      // Add v5-specific advanced parameters if provided
       if (personaId != null && personaId.isNotEmpty) {
         requestData['personaId'] = personaId;
       }
@@ -156,7 +160,17 @@ class AIMusicService {
         requestData['negativeTags'] = negativeTags;
       }
       if (vocalGender != null && vocalGender.isNotEmpty) {
-        requestData['vocalGender'] = vocalGender;
+        // Ensure correct format for kie.ai API
+        requestData['vocalGender'] = vocalGender.toLowerCase() == 'male' ? 'm' :
+                                   vocalGender.toLowerCase() == 'female' ? 'f' : vocalGender;
+      }
+
+      // Add temperature parameter if provided (creativity level)
+      if (temperature != 0.7) {
+        // Map temperature to weirdnessConstraint if not already set
+        if (weirdnessConstraint == null) {
+          requestData['weirdnessConstraint'] = temperature.clamp(0.0, 1.0);
+        }
       }
 
       Logger.log('🎵 Sending music generation request:');
@@ -283,9 +297,28 @@ class AIMusicService {
   }
 
 
-  /// Format prompt according to kie.ai best practices
-  String _formatPromptForKieAi(String prompt, String? genre, String? mood, String? style, String? lyrics) {
+  /// Format prompt according to kie.ai best practices with duration hints
+  String _formatPromptForKieAi(String prompt, String? genre, String? mood, String? style, String? lyrics, int duration) {
     var formattedPrompt = prompt.trim();
+
+    // Add duration hints since API has no direct duration parameter
+    String durationHint = '';
+    if (duration <= 30) {
+      durationHint = 'short 30 second';
+    } else if (duration <= 60) {
+      durationHint = 'one minute';
+    } else if (duration <= 90) {
+      durationHint = 'short 90 second';
+    } else if (duration <= 120) {
+      durationHint = 'two minute';
+    } else {
+      durationHint = 'full length';
+    }
+
+    // Include duration hint in prompt
+    if (duration <= 120) {
+      formattedPrompt = '$durationHint $formattedPrompt';
+    }
 
     // Add style and mood context if provided
     if (mood != null && mood.isNotEmpty) {
@@ -417,10 +450,13 @@ class AIMusicService {
         },
       };
 
+      // Use actual track title from kie.ai or fallback to generated one
+      final actualTitle = trackData['title'] ?? updateData['title'] ?? 'AI Generated Track';
+
       // Create updated track object and save it
       final updatedTrack = AITrack(
         id: taskId,
-        title: updateData['title'] as String,
+        title: actualTitle,
         artist: 'AI Artist',
         genre: 'AI Music',
         mood: 'Generated',
