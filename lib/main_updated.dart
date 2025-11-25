@@ -92,6 +92,9 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
     final settings = ref.watch(settingsProvider);
     final isConfigured = ref.watch(isConfiguredProvider);
 
+    // Debug: Print current page index
+    print('📱 Current page index: $_currentIndex');
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F23),
       body: Container(
