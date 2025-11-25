@@ -57,10 +57,13 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isTablet = size.width > 768;
+    final isMobile = size.width < 600;
 
     return Container(
-      height: size.height,
       width: double.infinity,
+      constraints: BoxConstraints(
+        minHeight: size.height,
+      ),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -80,38 +83,55 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: isTablet ? 60 : 24,
-                vertical: 40,
+                horizontal: isMobile ? 16 : (isTablet ? 60 : 32),
+                vertical: isMobile ? 20 : 40,
               ),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Row(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (isTablet) {
+                    // Desktop/Tablet Layout
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         // Left Content
                         Expanded(
-                          flex: isTablet ? 1 : 1,
-                          child: _buildMainContent(isTablet),
+                          flex: 3,
+                          child: _buildMainContent(isTablet, isMobile),
                         ),
 
-                        if (isTablet) ...[
-                          const SizedBox(width: 60),
-                          // Right Visual
-                          Expanded(
-                            flex: 1,
-                            child: _buildHeroVisual(),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                        const SizedBox(width: 40),
 
-                  if (!isTablet)
-                    SizedBox(
-                      height: size.height * 0.4,
-                      child: _buildHeroVisual(),
-                    ),
-                ],
+                        // Right Visual
+                        Expanded(
+                          flex: 2,
+                          child: _buildHeroVisual(isTablet, isMobile),
+                        ),
+                      ],
+                    );
+                  } else {
+                    // Mobile Layout
+                    return SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          SizedBox(height: size.height * 0.05),
+
+                          // Hero Visual First on Mobile
+                          Container(
+                            height: size.height * 0.35,
+                            child: _buildHeroVisual(isTablet, isMobile),
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // Main Content Below on Mobile
+                          _buildMainContent(isTablet, isMobile),
+
+                          SizedBox(height: size.height * 0.1),
+                        ],
+                      ),
+                    );
+                  }
+                },
               ),
             ),
           ),
@@ -186,26 +206,27 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
     );
   }
 
-  Widget _buildMainContent(bool isTablet) {
+  Widget _buildMainContent(bool isTablet, bool isMobile) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: isMobile ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         // Title
         Text(
           'AI Radio Platform',
           style: TextStyle(
-            fontSize: isTablet ? 64 : 42,
+            fontSize: isMobile ? 36 : (isTablet ? 64 : 48),
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
             height: 1.1,
           ),
+          textAlign: isMobile ? TextAlign.center : TextAlign.start,
         )
           .animate()
           .fadeIn(duration: 800.ms, delay: 200.ms)
           .slideX(begin: -0.3, end: 0),
 
-        const SizedBox(height: 16),
+        SizedBox(height: isMobile ? 12 : 16),
 
         // Subtitle
         ShaderMask(
@@ -215,27 +236,29 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
           child: Text(
             'Generate. Stream. Connect.',
             style: TextStyle(
-              fontSize: isTablet ? 32 : 24,
+              fontSize: isMobile ? 20 : (isTablet ? 32 : 24),
               fontWeight: FontWeight.w600,
               color: Colors.white,
               height: 1.2,
             ),
+            textAlign: isMobile ? TextAlign.center : TextAlign.start,
           ),
         )
           .animate()
           .fadeIn(duration: 800.ms, delay: 400.ms)
           .slideX(begin: -0.3, end: 0),
 
-        const SizedBox(height: 24),
+        SizedBox(height: isMobile ? 16 : 24),
 
         // Description
         Text(
           'Experience the future of music with AI-powered generation, live radio streaming, and real-time social features.',
           style: TextStyle(
-            fontSize: isTablet ? 18 : 16,
+            fontSize: isMobile ? 14 : (isTablet ? 18 : 16),
             color: AppColors.textSecondary,
             height: 1.6,
           ),
+          textAlign: isMobile ? TextAlign.center : TextAlign.start,
         )
           .animate()
           .fadeIn(duration: 800.ms, delay: 600.ms)
@@ -252,7 +275,7 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
         const SizedBox(height: 40),
 
         // Action Buttons
-        _buildActionButtons(isTablet)
+        _buildActionButtons(isTablet, isMobile)
           .animate()
           .fadeIn(duration: 800.ms, delay: 1000.ms)
           .slideY(begin: 0.3, end: 0),
@@ -304,8 +327,10 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
     );
   }
 
-  Widget _buildActionButtons(bool isTablet) {
-    return Row(
+  Widget _buildActionButtons(bool isTablet, bool isMobile) {
+    return Flex(
+      direction: isMobile ? Axis.vertical : Axis.horizontal,
+      mainAxisAlignment: isMobile ? MainAxisAlignment.center : MainAxisAlignment.start,
       children: [
         // Primary Button
         AnimatedBuilder(
@@ -368,7 +393,10 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
           },
         ),
 
-        const SizedBox(width: 20),
+        SizedBox(
+          width: isMobile ? 0 : 20,
+          height: isMobile ? 16 : 0,
+        ),
 
         // Secondary Button
         Container(
@@ -417,11 +445,13 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
     );
   }
 
-  Widget _buildHeroVisual() {
+  Widget _buildHeroVisual(bool isTablet, bool isMobile) {
+    final visualSize = isMobile ? 280.0 : (isTablet ? 400.0 : 350.0);
+
     return Center(
       child: Container(
-        width: 400,
-        height: 400,
+        width: visualSize,
+        height: visualSize,
         child: Stack(
           children: [
             // Main Visual Container (similar to HTML video component)
@@ -473,11 +503,13 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
                                 _pulseController.value
                               );
 
+                              final buttonSize = isMobile ? 60.0 : 80.0;
+
                               return Transform.scale(
                                 scale: scale,
                                 child: Container(
-                                  width: 80,
-                                  height: 80,
+                                  width: buttonSize,
+                                  height: buttonSize,
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.9),
                                     shape: BoxShape.circle,
@@ -489,9 +521,9 @@ class _HeroSectionWebState extends State<HeroSectionWeb>
                                       ),
                                     ],
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.play_arrow_rounded,
-                                    size: 40,
+                                    size: isMobile ? 30 : 40,
                                     color: AppColors.primary,
                                   ),
                                 ),
