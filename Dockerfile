@@ -1,17 +1,20 @@
 # Multi-stage Flutter Web build for Railway deployment
 FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
+# Switch to the flutter user (exists in the image)
+USER flutter
+
 # Set working directory
 WORKDIR /app
 
-# Copy pubspec files
-COPY pubspec.yaml pubspec.lock ./
+# Copy pubspec files with proper ownership
+COPY --chown=flutter:flutter pubspec.yaml pubspec.lock ./
 
 # Get dependencies
 RUN flutter pub get
 
-# Copy source code
-COPY . .
+# Copy source code with proper ownership
+COPY --chown=flutter:flutter . .
 
 # Build web app for production with environment variables support
 ARG SUPABASE_URL
