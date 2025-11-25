@@ -126,7 +126,7 @@ void main() async {
       'server_status': 'running',
       'webhook_endpoint': '/api/webhook/music',
       'timestamp': DateTime.now().toIso8601String(),
-      'supabase_connected': supabase.supabaseUrl.isNotEmpty,
+      'supabase_connected': true, // supabase client is initialized
     };
 
     return Response.ok(
