@@ -5,7 +5,7 @@ import 'providers/settings_provider.dart';
 import 'screens/settings_screen.dart';
 import 'screens/ai_music_studio_screen_simple.dart';
 import 'widgets/track_list_widget.dart';
-import 'app/pages/home_page.dart';
+import 'widgets/hero_section_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -117,7 +117,7 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
   Widget _buildCurrentPage() {
     switch (_currentIndex) {
       case 0:
-        return HomePage(
+        return HeroSectionWeb(
           onGetStarted: () => setState(() => _currentIndex = 1),
           onWatchDemo: () => _showMessage('Demo features coming soon!', const Color(0xFF8B5CF6)),
         );
@@ -130,7 +130,7 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
       case 4:
         return const SettingsScreen();
       default:
-        return HomePage(
+        return HeroSectionWeb(
           onGetStarted: () => setState(() => _currentIndex = 1),
           onWatchDemo: () => _showMessage('Demo features coming soon!', const Color(0xFF8B5CF6)),
         );
