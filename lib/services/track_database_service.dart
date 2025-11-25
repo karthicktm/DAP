@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../constants/api_constants.dart';
 import '../models/ai_track.dart';
 import '../utils/logger.dart';
+import '../services/secure_storage_service.dart';
 
 /// Track Database Service using Supabase for persistent storage
 class TrackDatabaseService {
@@ -19,30 +20,48 @@ class TrackDatabaseService {
     if (_isInitialized) return;
 
     try {
+      // Try to get credentials from settings first
+      String? supabaseUrl = await SecureStorageService.getSupabaseUrl();
+      String? supabaseKey = await SecureStorageService.getSupabaseKey();
+
+      // Fall back to API constants (which may include env vars)
+      if (supabaseUrl == null || supabaseKey == null) {
+        supabaseUrl = ApiConstants.supabaseUrl;
+        supabaseKey = ApiConstants.supabaseAnonKey;
+      }
+
+      // Check if we have valid credentials
+      if (supabaseUrl == 'your_supabase_url' ||
+          supabaseKey == 'your_supabase_anon_key' ||
+          supabaseUrl.isEmpty ||
+          supabaseKey.isEmpty) {
+        Logger.log('Supabase not configured, will use local storage fallback');
+        _isInitialized = false;
+        return;
+      }
+
       // Initialize Supabase if not already done
       if (Supabase.instance.client == null) {
         await Supabase.initialize(
-          url: ApiConstants.supabaseUrl,
-          anonKey: ApiConstants.supabaseAnonKey,
+          url: supabaseUrl,
+          anonKey: supabaseKey,
         );
       }
 
       _supabase = Supabase.instance.client;
       _isInitialized = true;
 
-      Logger.log('Supabase initialized successfully');
+      Logger.log('✅ Supabase initialized successfully with URL: ${supabaseUrl.substring(0, 30)}...');
     } catch (e) {
-      Logger.log('Failed to initialize Supabase: $e');
-      // Continue with mock data mode if Supabase fails
+      Logger.log('❌ Failed to initialize Supabase: $e');
+      // Continue with local storage mode if Supabase fails
       _isInitialized = false;
     }
   }
 
   /// Check if Supabase is properly configured and available
   bool get isSupabaseAvailable {
-    return _isInitialized &&
-           ApiConstants.supabaseUrl != 'your_supabase_url' &&
-           ApiConstants.supabaseAnonKey != 'your_supabase_anon_key';
+    return _isInitialized;
   }
 
   /// Save a generated track to the database

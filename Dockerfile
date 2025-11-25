@@ -1,20 +1,31 @@
 # Multi-stage Flutter Web build for Railway deployment
 FROM ghcr.io/cirruslabs/flutter:stable AS builder
 
-# Use existing user in Flutter image and set working directory
+# Create and switch to non-root user for security
+RUN useradd -m -s /bin/bash flutteruser
+USER flutteruser
+
+# Set working directory
 WORKDIR /app
 
-# Copy pubspec files
-COPY pubspec.yaml pubspec.lock ./
+# Copy pubspec files with correct ownership
+COPY --chown=flutteruser:flutteruser pubspec.yaml pubspec.lock ./
 
 # Get dependencies
 RUN flutter pub get
 
-# Copy source code
-COPY . .
+# Copy source code with correct ownership
+COPY --chown=flutteruser:flutteruser . .
 
-# Build web app for production
-RUN flutter build web --release --no-web-resources-cdn
+# Build web app for production with environment variables support
+ARG SUPABASE_URL
+ARG SUPABASE_ANON_KEY
+ARG KIE_AI_API_KEY
+
+RUN flutter build web --release --no-web-resources-cdn \
+  --dart-define=SUPABASE_URL=${SUPABASE_URL} \
+  --dart-define=SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY} \
+  --dart-define=KIE_AI_API_KEY=${KIE_AI_API_KEY}
 
 # Production stage with nginx
 FROM nginx:stable-alpine

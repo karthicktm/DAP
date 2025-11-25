@@ -2,6 +2,11 @@
 builder = "DOCKERFILE"
 dockerfilePath = "./Dockerfile"
 
+[build.buildArgs]
+SUPABASE_URL = "${{SUPABASE_URL}}"
+SUPABASE_ANON_KEY = "${{SUPABASE_ANON_KEY}}"
+KIE_AI_API_KEY = "${{KIE_AI_API_KEY}}"
+
 [deploy]
 restartPolicyType = "on_failure"
 

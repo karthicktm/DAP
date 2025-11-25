@@ -1,11 +1,22 @@
 class ApiConstants {
-  // kie.ai Configuration
-  static const String kieAiApiKey = 'your_kie_ai_api_key_here';
+  // kie.ai Configuration - use environment variables if available
+  static String get kieAiApiKey {
+    const envKey = String.fromEnvironment('KIE_AI_API_KEY');
+    return envKey.isNotEmpty ? envKey : 'your_kie_ai_api_key_here';
+  }
+
   static const String kieAiBaseUrl = 'https://api.kie.ai/api/v1';
 
-  // Supabase Configuration
-  static const String supabaseUrl = 'your_supabase_url';
-  static const String supabaseAnonKey = 'your_supabase_anon_key';
+  // Supabase Configuration - use environment variables if available
+  static String get supabaseUrl {
+    const envUrl = String.fromEnvironment('SUPABASE_URL');
+    return envUrl.isNotEmpty ? envUrl : 'your_supabase_url';
+  }
+
+  static String get supabaseAnonKey {
+    const envKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+    return envKey.isNotEmpty ? envKey : 'your_supabase_anon_key';
+  }
 
   // PocketBase Configuration
   static const String pocketBaseUrl = 'your_pocketbase_url';

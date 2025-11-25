@@ -24,7 +24,11 @@ class AIMusicService {
 
   /// Create and configure Dio instance with stored API key
   Future<Dio> _createDio() async {
-    final apiKey = await SecureStorageService.getKieAiKey();
+    // Try to get API key from secure storage first, then fall back to constants
+    String? apiKey = await SecureStorageService.getKieAiKey();
+    if (apiKey == null || apiKey.isEmpty || apiKey == 'your_kie_ai_api_key_here') {
+      apiKey = ApiConstants.kieAiApiKey;
+    }
 
     final dio = Dio(BaseOptions(
       baseUrl: _baseUrl,
