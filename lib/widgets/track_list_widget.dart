@@ -360,7 +360,10 @@ class _TrackListWidgetState extends State<TrackListWidget> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => TrackDetailsSheet(track: track),
+      builder: (context) => TrackDetailsSheet(
+        track: track,
+        onPlay: () => _playTrack(track),
+      ),
     );
   }
 
@@ -780,8 +783,13 @@ class TrackCard extends StatelessWidget {
 
 class TrackDetailsSheet extends StatelessWidget {
   final AITrack track;
+  final VoidCallback onPlay;
 
-  const TrackDetailsSheet({Key? key, required this.track}) : super(key: key);
+  const TrackDetailsSheet({
+    Key? key,
+    required this.track,
+    required this.onPlay,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -887,7 +895,7 @@ class TrackDetailsSheet extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    _playTrack(track);
+                    onPlay();
                   },
                   icon: Icon(Icons.play_arrow_rounded),
                   label: Text('Play'),

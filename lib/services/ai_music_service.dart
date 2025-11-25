@@ -311,6 +311,7 @@ class AIMusicService {
             }
 
             return track;
+            }
           }
 
           // Check if there's an error
