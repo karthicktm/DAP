@@ -74,6 +74,7 @@ void main() async {
         print('🎵 Track completed:');
         print('   Title: ${trackData['title']}');
         print('   Audio URL: ${trackData['audio_url'] ?? trackData['audioUrl']}');
+        print('   Image URL: ${trackData['image_url'] ?? trackData['imageUrl']}');
         print('   Duration: ${trackData['duration']}');
 
         // Update Supabase database with completed track
@@ -140,11 +141,14 @@ bool _isValidKieAiWebhook(Map<String, dynamic> payload) {
 Future<void> _updateSupabaseTrack(String taskId, Map<String, dynamic> trackData) async {
   try {
     // Create the updated track data with correct field mapping
+    final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'] ?? '';
+    final imageUrl = trackData['image_url'] ?? trackData['imageUrl'] ?? '';
+
     final updatedTrackData = {
       'title': trackData['title'] ?? 'AI Generated Track',
       'artist': 'AI Artist',
-      'audio_url': trackData['audio_url'] ?? trackData['audioUrl'] ?? '',
-      'cover_art_url': trackData['image_url'] ?? trackData['imageUrl'] ?? '',
+      'audio_url': audioUrl,
+      'cover_art_url': imageUrl,
       'duration_seconds': (trackData['duration'] is num) ? trackData['duration'].toInt() : 120,
       'is_instrumental': false,
       'metadata': {
@@ -155,6 +159,7 @@ Future<void> _updateSupabaseTrack(String taskId, Map<String, dynamic> trackData)
         'streamAudioUrl': trackData['stream_audio_url'] ?? trackData['streamAudioUrl'] ?? '',
         'webhookReceived': true,
         'completedAt': DateTime.now().toIso8601String(),
+        'originalTaskId': taskId,
       },
       'is_processing': false,
       'processing_completed': true,
@@ -162,13 +167,67 @@ Future<void> _updateSupabaseTrack(String taskId, Map<String, dynamic> trackData)
       'updated_at': DateTime.now().toIso8601String(),
     };
 
-    // Update the track in Supabase using the taskId
-    await supabase.from('tracks').update(updatedTrackData).eq('id', taskId);
+    print('🔄 Attempting to update track with taskId: $taskId');
+    print('🎵 Audio URL from webhook: $audioUrl');
+    print('🖼️ Image URL from webhook: $imageUrl');
 
-    print('✅ Track updated in Supabase with real audio URL: ${trackData['audioUrl']}');
+    // Try to update using taskId first (most likely scenario)
+    final updateResponse = await supabase
+        .from('tracks')
+        .update(updatedTrackData)
+        .eq('id', taskId)
+        .select();
+
+    if (updateResponse.isNotEmpty) {
+      print('✅ Track updated successfully using taskId as primary key');
+    } else {
+      print('⚠️ No track found with id=$taskId, trying metadata.taskId...');
+
+      // Fallback: Try to find track by taskId in metadata
+      final metadataUpdateResponse = await supabase
+          .from('tracks')
+          .update(updatedTrackData)
+          .eq('metadata->>taskId', taskId)
+          .select();
+
+      if (metadataUpdateResponse.isNotEmpty) {
+        print('✅ Track updated successfully using metadata.taskId');
+      } else {
+        print('❌ No track found with taskId: $taskId in any field');
+
+        // Last resort: Create new track with taskId
+        final newTrackData = {
+          'id': taskId,
+          ...updatedTrackData,
+        };
+
+        final insertResponse = await supabase
+            .from('tracks')
+            .insert(newTrackData)
+            .select();
+
+        if (insertResponse.isNotEmpty) {
+          print('✅ Created new track with taskId: $taskId');
+        } else {
+          print('❌ Failed to create new track');
+        }
+      }
+    }
+
+    print('✅ Webhook processing completed for taskId: $taskId');
 
   } catch (e) {
     print('❌ Error updating Supabase track: $e');
+    print('🔍 Error details: ${e.runtimeType}');
+
+    // Try to log more specific error information
+    if (e.toString().contains('duplicate key') || e.toString().contains('already exists')) {
+      print('💡 Suggestion: Track with this ID might already exist');
+    } else if (e.toString().contains('not found') || e.toString().contains('no rows')) {
+      print('💡 Suggestion: Track with taskId $taskId was not found in database');
+    } else if (e.toString().contains('connection') || e.toString().contains('network')) {
+      print('💡 Suggestion: Database connection issue - check Supabase configuration');
+    }
   }
 }
 
@@ -181,10 +240,36 @@ Future<void> _updateSupabaseStatus(String taskId, String status) async {
       'updated_at': DateTime.now().toIso8601String(),
     };
 
-    await supabase.from('tracks').update(statusUpdate).eq('id', taskId);
-    print('📱 Status updated for $taskId: $status');
+    print('📱 Updating status for taskId: $taskId to: $status');
+
+    // Try to update using taskId first
+    final updateResponse = await supabase
+        .from('tracks')
+        .update(statusUpdate)
+        .eq('id', taskId)
+        .select();
+
+    if (updateResponse.isNotEmpty) {
+      print('✅ Status updated successfully using taskId as primary key');
+    } else {
+      print('⚠️ No track found with id=$taskId, trying metadata.taskId...');
+
+      // Fallback: Try to find track by taskId in metadata
+      final metadataUpdateResponse = await supabase
+          .from('tracks')
+          .update(statusUpdate)
+          .eq('metadata->>taskId', taskId)
+          .select();
+
+      if (metadataUpdateResponse.isNotEmpty) {
+        print('✅ Status updated successfully using metadata.taskId');
+      } else {
+        print('❌ No track found with taskId: $taskId for status update');
+      }
+    }
 
   } catch (e) {
-    print('❌ Error updating status: $e');
+    print('❌ Error updating status for taskId $taskId: $e');
+    print('🔍 Status update error details: ${e.runtimeType}');
   }
 }
