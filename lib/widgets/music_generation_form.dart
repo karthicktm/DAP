@@ -33,6 +33,7 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
   bool _includeVocals = true;
   bool _generateLyrics = false;
   bool _isArabicMode = false;
+  String? _currentTaskId; // Store current generation taskId
 
   @override
   void dispose() {
@@ -455,6 +456,9 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
         instrumental: !_includeVocals,
         language: _isArabicMode ? 'arabic' : 'english',
         onTaskIdReceived: (taskId) {
+          // Store the taskId for later use when updating the track
+          _currentTaskId = taskId;
+
           // Create processing track with the actual taskId when received
           final processingTrack = AITrack(
             id: taskId, // Use actual taskId from kie.ai
@@ -481,9 +485,9 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
         },
       );
 
-      // Convert GeneratedTrack to completed AITrack
+      // Update processing track to completed status - using original taskId to maintain same track
       final completedTrack = AITrack(
-        id: generatedTrack.id, // Use real kie.ai track ID
+        id: _currentTaskId ?? generatedTrack.id, // Use stored taskId to replace the processing track
         title: generatedTrack.title,
         artist: generatedTrack.artist,
         genre: generatedTrack.genre,
@@ -502,7 +506,7 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
         processingStatus: 'Completed',
       );
 
-      // Replace processing track with completed track
+      // Update the existing processing track (same ID) with completed data
       widget.onGenerationComplete(completedTrack);
     } catch (e) {
       // Create error track with same parameters as would have been used for processing
