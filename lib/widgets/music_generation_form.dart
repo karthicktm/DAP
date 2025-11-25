@@ -456,42 +456,7 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
           : null,
         instrumental: !_includeVocals,
         language: _isArabicMode ? 'arabic' : 'english',
-        onTaskIdReceived: (taskId) async {
-          // Store the taskId for later use when updating the track
-          _currentTaskId = taskId;
-
-          // Use Future.microtask to avoid blocking the main thread
-          Future.microtask(() {
-            try {
-              // Create processing track with the actual taskId when received
-              final processingTrack = AITrack(
-                id: taskId, // Use actual taskId from kie.ai
-                title: _promptController.text.trim().length > 50
-                    ? '${_promptController.text.trim().substring(0, 47)}...'
-                    : _promptController.text.trim(),
-                artist: 'AI Artist',
-                genre: _selectedGenre,
-                mood: _selectedMood,
-                duration: Duration(seconds: _duration.round()),
-                audioUrl: '', // Empty until generation completes
-                createdAt: DateTime.now(),
-                isInstrumental: !_includeVocals,
-                lyrics: _generateLyrics && _lyricsController.text.isNotEmpty
-                    ? _lyricsController.text.trim()
-                    : null,
-                isProcessing: true,
-                processingStatus: 'Generating music...',
-                processingCompleted: false,
-              );
-
-              // Add processing track to library asynchronously
-              widget.onGenerationComplete(processingTrack);
-              Logger.log('✅ Processing track created with taskId: $taskId');
-            } catch (e) {
-              Logger.log('❌ Error creating processing track: $e');
-            }
-          });
-        },
+        // onTaskIdReceived: null, // Disabled to prevent crashes - polling will handle everything
         onTrackCompleted: (completedTrack) {
           // Update UI when polling completes - replace processing track with completed track
           Future.microtask(() {

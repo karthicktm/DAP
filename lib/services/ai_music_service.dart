@@ -195,15 +195,9 @@ class AIMusicService {
           final taskId = data['taskId'];
           Logger.log('Received taskId: $taskId - Music generation submitted successfully');
 
-          // Call the callback to create processing track immediately
+          // Skip processing track callback to prevent crashes - go directly to polling
           if (onTaskIdReceived != null) {
-            try {
-              onTaskIdReceived(taskId);
-              Logger.log('✅ Processing track callback completed');
-            } catch (e) {
-              Logger.log('❌ Error in onTaskIdReceived callback: $e');
-              // Continue with polling even if callback fails
-            }
+            Logger.log('⚠️ Skipping onTaskIdReceived callback to prevent crashes');
           }
 
           Logger.log('🔄 About to start polling for taskId: $taskId');
