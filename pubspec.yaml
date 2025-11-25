@@ -24,6 +24,8 @@ dependencies:
   # UI/UX - Latest 2025 Design Trends
   lottie: ^3.1.0
   flutter_animate: ^4.5.0
+  glassmorphism: ^3.2.0
+  flutter_neumorphic: ^3.2.0
 
   # Audio/Media - Latest 2025 audio packages
   just_audio: ^0.10.5
