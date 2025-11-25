@@ -96,6 +96,9 @@ class TrackDatabaseService {
         'created_at': track.createdAt.toIso8601String(),
         'metadata': track.metadata,
         'user_id': _supabase.auth.currentUser?.id ?? 'anonymous',
+        'is_processing': track.isProcessing ?? false,
+        'processing_status': track.processingStatus,
+        'processing_completed': track.processingCompleted ?? false,
       };
 
       await _supabase.from('tracks').upsert(trackData);
@@ -139,6 +142,9 @@ class TrackDatabaseService {
             isInstrumental: trackData['is_instrumental']?.toString().toLowerCase() == 'true',
             lyrics: trackData['lyrics']?.toString(),
             metadata: Map<String, dynamic>.from(trackData['metadata'] ?? {}),
+            isProcessing: trackData['is_processing']?.toString().toLowerCase() == 'true',
+            processingStatus: trackData['processing_status']?.toString(),
+            processingCompleted: trackData['processing_completed']?.toString().toLowerCase() == 'true',
           );
           tracks.add(track);
         } catch (e) {
@@ -185,6 +191,9 @@ class TrackDatabaseService {
           isInstrumental: trackData['is_instrumental']?.toString().toLowerCase() == 'true',
           lyrics: trackData['lyrics']?.toString(),
           metadata: Map<String, dynamic>.from(trackData['metadata'] ?? {}),
+          isProcessing: trackData['is_processing']?.toString().toLowerCase() == 'true',
+          processingStatus: trackData['processing_status']?.toString(),
+          processingCompleted: trackData['processing_completed']?.toString().toLowerCase() == 'true',
         );
         tracks.add(track);
       }
