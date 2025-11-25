@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:shelf_cors_headers/shelf_cors_headers.dart';
+import 'package:shelf_cors_headers/shelf_cors_headers.dart' as cors;
 import 'package:supabase/supabase.dart';
 
 late SupabaseClient supabase;
@@ -63,6 +63,11 @@ void main() async {
 
       print('📋 Callback details: type=$callbackType, taskId=$taskId');
 
+      if (taskId == null) {
+        print('❌ No taskId found in webhook payload');
+        return Response.badRequest(body: 'Missing taskId in payload');
+      }
+
       if (callbackType == 'complete' && trackDataList != null && trackDataList.isNotEmpty) {
         final trackData = trackDataList[0] as Map<String, dynamic>;
 
@@ -114,7 +119,7 @@ void main() async {
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final server = await io.serve(
     Pipeline()
-        .addMiddleware(corsHeaders)
+        .addMiddleware(cors.corsHeaders())
         .addHandler(app),
     InternetAddress.anyIPv4,
     port,
