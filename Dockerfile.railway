@@ -58,8 +58,20 @@ RUN flutter build web \
     --dart-define=RAILWAY_STATIC_URL=$RAILWAY_STATIC_URL \
     --release
 
-# Expose port
-EXPOSE $PORT
+# Expose port (Railway sets PORT dynamically)
+EXPOSE 8080
+
+# Create startup script to handle PORT properly
+RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'echo "🚀 Starting web server..."' >> /start.sh && \
+    echo 'echo "PORT: ${PORT:-8080}"' >> /start.sh && \
+    echo 'echo "Working directory: $(pwd)"' >> /start.sh && \
+    echo 'cd /app/build/web' >> /start.sh && \
+    echo 'echo "Files in build/web:"' >> /start.sh && \
+    echo 'ls -la' >> /start.sh && \
+    echo 'echo "Starting Python HTTP server on port ${PORT:-8080}"' >> /start.sh && \
+    echo 'exec python3 -m http.server ${PORT:-8080}' >> /start.sh && \
+    chmod +x /start.sh
 
 # Start web server
-CMD cd build/web && python3 -m http.server $PORT
+CMD ["/start.sh"]
