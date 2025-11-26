@@ -1,0 +1,14 @@
+# Super simple approach - use pre-built web files
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Copy only the built web files (no Flutter build needed)
+COPY build/web ./web
+
+# Create simple startup script
+RUN echo '#!/bin/bash\ncd /app/web && python3 -m http.server ${PORT:-8080}' > /start.sh && \
+    chmod +x /start.sh
+
+EXPOSE 8080
+CMD ["/start.sh"]

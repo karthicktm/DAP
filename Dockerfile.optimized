@@ -1,0 +1,66 @@
+# Optimized Railway Dockerfile for Flutter Web - Fast builds
+FROM ubuntu:20.04
+
+# Prevent interactive prompts during apt install
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies in one layer
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    unzip \
+    xz-utils \
+    zip \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create startup script first (small layer)
+RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'echo "🚀 Starting web server on port ${PORT:-8080}"' >> /start.sh && \
+    echo 'cd /app/build/web && exec python3 -m http.server ${PORT:-8080}' >> /start.sh && \
+    chmod +x /start.sh
+
+# Download and install Flutter (cached layer)
+ENV FLUTTER_VERSION=3.22.3
+ENV PATH="/flutter/bin:$PATH"
+RUN git clone https://github.com/flutter/flutter.git -b stable --depth 1 /flutter && \
+    chown -R root:root /flutter && \
+    flutter --version
+
+# Create non-root user
+RUN useradd -m -u 1001 flutteruser
+
+# Set working directory and copy dependencies first for better caching
+WORKDIR /app
+COPY pubspec.yaml pubspec.lock ./
+
+# Change ownership and switch to user
+RUN chown -R flutteruser:flutteruser /app /flutter
+USER flutteruser
+
+# Install Flutter dependencies (cached layer if pubspec unchanged)
+RUN flutter pub get
+
+# Copy source code (this layer changes frequently)
+COPY --chown=flutteruser:flutteruser lib ./lib
+COPY --chown=flutteruser:flutteruser web ./web
+COPY --chown=flutteruser:flutteruser assets ./assets
+COPY --chown=flutteruser:flutteruser .env ./
+
+# Build arguments for environment variables
+ARG KIE_AI_API_KEY
+ARG SUPABASE_URL
+ARG SUPABASE_ANON_KEY
+ARG RAILWAY_STATIC_URL
+
+# Build Flutter web app (final step)
+RUN flutter build web \
+    --dart-define=KIE_AI_API_KEY=$KIE_AI_API_KEY \
+    --dart-define=SUPABASE_URL=$SUPABASE_URL \
+    --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+    --dart-define=RAILWAY_STATIC_URL=$RAILWAY_STATIC_URL \
+    --release
+
+# Expose port and start
+EXPOSE 8080
+CMD ["/start.sh"]

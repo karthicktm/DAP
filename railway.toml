@@ -1,19 +1,11 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "./Dockerfile.railway"
+dockerfilePath = "./Dockerfile"
 
 [build.buildArgs]
 KIE_AI_API_KEY = "${{KIE_AI_API_KEY}}"
 SUPABASE_URL = "${{SUPABASE_URL}}"
 SUPABASE_ANON_KEY = "${{SUPABASE_ANON_KEY}}"
-RAILWAY_STATIC_URL = "${{RAILWAY_STATIC_URL}}"
 
 [deploy]
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
-
-[environments.production.variables]
-# These will be set in Railway dashboard - documented here for reference
-# KIE_AI_API_KEY = "your_actual_kie_ai_key"
-# SUPABASE_URL = "your_actual_supabase_url"
-# SUPABASE_ANON_KEY = "your_actual_supabase_key"
