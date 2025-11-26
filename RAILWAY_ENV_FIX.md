@@ -24,15 +24,17 @@ kieAiKey ??= ApiConstants.kieAiApiKey != 'your_kie_ai_api_key_here'
 ```
 
 ### 3. Railway Deployment Configuration
-- **File**: `railway.toml`
+- **File**: `railway.toml` and `nixpacks.toml`
 - **Purpose**: Ensures environment variables are passed as `--dart-define` flags during build
 - **Command**:
 ```bash
 flutter build web \
   --dart-define=KIE_AI_API_KEY=$KIE_AI_API_KEY \
   --dart-define=SUPABASE_URL=$SUPABASE_URL \
-  --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+  --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+  --release
 ```
+- **Fix**: Removed deprecated `--web-renderer` flag and added proper nixpacks configuration
 
 ### 4. Build Script
 - **File**: `build_for_railway.sh`

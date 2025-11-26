@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ['flutter']
+
+[phases.build]
+cmds = [
+  'flutter --version',
+  'flutter pub get',
+  'flutter build web --dart-define=KIE_AI_API_KEY=$KIE_AI_API_KEY --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --release'
+]
+
+[start]
+cmd = 'cd build/web && python3 -m http.server $PORT'

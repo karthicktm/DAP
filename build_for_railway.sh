@@ -25,8 +25,7 @@ flutter build web \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   --dart-define=RAILWAY_STATIC_URL="$RAILWAY_STATIC_URL" \
   --dart-define=CUSTOM_DOMAIN="$CUSTOM_DOMAIN" \
-  --release \
-  --web-renderer canvaskit
+  --release
 
 echo "✅ Flutter web build completed!"
 echo "📁 Build output is in: build/web/"
