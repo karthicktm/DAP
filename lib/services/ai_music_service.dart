@@ -483,9 +483,6 @@ class AIMusicService {
                 Logger.log('⚠️ Could not find original track duration, using default: $e');
               }
 
-              // Save all tracks as alternatives, then select the best one by default
-              await _saveAllTrackAlternatives(taskId, trackDataList, requestedDuration);
-
               // Select track closest to requested duration as the primary
               final trackData = _selectBestTrack(trackDataList, requestedDuration);
               final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'];
@@ -515,6 +512,20 @@ class AIMusicService {
       } catch (e) {
         Logger.log('❌ Polling error (attempt $attempts): $e');
 
+        // Check if it's a 404 error - task doesn't exist, stop polling
+        if (e.toString().contains('404') || e.toString().contains('Not Found')) {
+          Logger.log('🚫 Task $taskId not found (404), stopping polling - task may have been cancelled or expired');
+
+          // Mark track as failed in database
+          try {
+            await TrackDatabaseService().removeProcessingTrack(taskId);
+            Logger.log('🗑️ Removed failed processing track: $taskId');
+          } catch (removeError) {
+            Logger.log('⚠️ Could not remove failed track: $removeError');
+          }
+          break;
+        }
+
         // Continue polling unless it's the last attempt
         if (attempts >= maxAttempts) {
           Logger.log('🚫 Polling failed after $maxAttempts attempts for taskId: $taskId');
@@ -532,10 +543,10 @@ class AIMusicService {
       final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'] ?? '';
       final imageUrl = trackData['image_url'] ?? trackData['imageUrl'] ?? '';
 
+      // Only update completion-related fields, preserve original track metadata
       final updateData = {
         'audio_url': audioUrl,
         'cover_art_url': imageUrl,
-        'title': trackData['title'] ?? 'AI Generated Track',
         'duration_seconds': (trackData['duration'] is num) ? trackData['duration'].toInt() : 120,
         'is_processing': false,
         'processing_completed': true,
@@ -553,28 +564,23 @@ class AIMusicService {
         },
       };
 
-      // Use actual track title from kie.ai or fallback to generated one
-      final actualTitle = trackData['title'] ?? updateData['title'] ?? 'AI Generated Track';
-
-      // Create updated track object and save it
-      final updatedTrack = AITrack(
+      // Use database service to update track (preserves original title/artist/genre/mood)
+      await TrackDatabaseService().completeProcessingTrack(taskId, AITrack(
         id: taskId,
-        title: actualTitle,
-        artist: 'AI Artist',
-        genre: 'AI Music',
-        mood: 'Generated',
+        title: 'Polling Update', // This will be ignored by completeProcessingTrack
+        artist: 'AI Artist', // This will be ignored by completeProcessingTrack
+        genre: 'AI Music', // This will be ignored by completeProcessingTrack
+        mood: 'Generated', // This will be ignored by completeProcessingTrack
         duration: Duration(seconds: updateData['duration_seconds'] as int),
         audioUrl: updateData['audio_url'] as String,
         coverArtUrl: updateData['cover_art_url'] as String?,
         createdAt: DateTime.now(),
         isInstrumental: false,
-        isProcessing: updateData['is_processing'] as bool,
-        processingStatus: updateData['processing_status'] as String,
-        processingCompleted: updateData['processing_completed'] as bool,
+        isProcessing: false,
+        processingStatus: 'Completed via polling',
+        processingCompleted: true,
         metadata: updateData['metadata'] as Map<String, dynamic>,
-      );
-
-      await TrackDatabaseService().saveTrack(updatedTrack);
+      ));
       Logger.log('✅ Track updated via polling: $taskId');
 
     } catch (e) {
