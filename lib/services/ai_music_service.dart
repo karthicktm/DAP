@@ -120,8 +120,8 @@ class AIMusicService {
     Function(AITrack completedTrack)? onTrackCompleted,
   }) async {
     try {
-      // Format the prompt with duration hint since API has no duration param
-      final formattedPrompt = _formatPromptForKieAi(prompt, genre, mood, style, lyrics, duration);
+      // Format the prompt for music generation (not including the description as lyrics)
+      final formattedPrompt = _formatMusicPromptForKieAi(genre, mood, style, lyrics, duration, includeLyrics);
 
       final requestData = {
         'prompt': formattedPrompt,
@@ -140,8 +140,8 @@ class AIMusicService {
         requestData['style'] = mood;
       }
 
-      // Generate a descriptive title
-      requestData['title'] = _generateTitle(prompt, genre);
+      // Use the prompt (description) as the track title
+      requestData['title'] = _generateTrackTitle(prompt, genre, mood);
 
       // Add v5-specific advanced parameters if provided
       if (personaId != null && personaId.isNotEmpty) {
@@ -214,9 +214,10 @@ class AIMusicService {
           Logger.log('✅ Received taskId: $taskId - Music generation submitted successfully');
 
           // Create processing track and save to Supabase immediately
+          final trackTitle = _generateTrackTitle(prompt, genre, mood);
           final processingTrack = AITrack(
             id: taskId,
-            title: 'Generating: ${prompt.substring(0, prompt.length.clamp(0, 30))}...',
+            title: 'Generating: ${trackTitle.substring(0, trackTitle.length.clamp(0, 30))}...',
             artist: 'AI Music Generator',
             genre: genre ?? 'AI Music',
             mood: mood ?? 'Generated',
@@ -231,7 +232,8 @@ class AIMusicService {
             processingCompleted: false,
             metadata: {
               'taskId': taskId,
-              'originalPrompt': prompt,
+              'originalDescription': prompt, // User's description for track name
+              'musicPrompt': formattedPrompt, // Actual prompt sent to kie.ai
               'requestedGenre': genre,
               'requestedMood': mood,
               'webhookExpected': true,
@@ -351,11 +353,19 @@ class AIMusicService {
     return formattedPrompt;
   }
 
-  /// Generate a title from prompt and genre
-  String _generateTitle(String prompt, String? genre) {
-    // Take first 3-4 words from prompt and capitalize
-    final words = prompt.split(' ').take(4);
-    var title = words.map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : '').join(' ');
+  /// Generate a track title from the user's description
+  String _generateTrackTitle(String description, String? genre, String? mood) {
+    // Use the description directly as the title (this is what user expects)
+    var title = description.trim();
+
+    // Add genre/mood context if description is too generic
+    if (title.length < 10 && genre != null && genre.isNotEmpty) {
+      title = '$genre $title';
+    }
+
+    if (title.length < 15 && mood != null && mood.isNotEmpty) {
+      title = '$mood $title';
+    }
 
     // Limit to 80 characters as per kie.ai requirements
     if (title.length > 80) {
@@ -363,6 +373,65 @@ class AIMusicService {
     }
 
     return title.isNotEmpty ? title : 'AI Generated Track';
+  }
+
+  /// Format music generation prompt (separate from user description)
+  String _formatMusicPromptForKieAi(String? genre, String? mood, String? style, String? lyrics, int duration, bool includeLyrics) {
+    var musicPrompt = '';
+
+    // Build music generation prompt without user description
+    // Add genre as the base
+    if (genre != null && genre.isNotEmpty) {
+      musicPrompt = genre;
+    }
+
+    // Add mood context
+    if (mood != null && mood.isNotEmpty) {
+      musicPrompt = musicPrompt.isEmpty ? mood : '$mood $musicPrompt';
+    }
+
+    // Add style specification
+    if (style != null && style.isNotEmpty && style != 'modern') {
+      musicPrompt = musicPrompt.isEmpty ? style : '$musicPrompt with $style style';
+    }
+
+    // If no specific parameters, use generic music prompt
+    if (musicPrompt.isEmpty) {
+      musicPrompt = 'music track';
+    }
+
+    // Add aggressive duration hints
+    String durationHint = '';
+    String durationSuffix = '';
+
+    if (duration <= 30) {
+      durationHint = 'extremely short 30-second clip';
+      durationSuffix = ', keep it under 30 seconds, brief and concise';
+    } else if (duration <= 45) {
+      durationHint = 'very short 45-second snippet';
+      durationSuffix = ', maximum 45 seconds duration';
+    } else if (duration <= 60) {
+      durationHint = 'one minute track';
+      durationSuffix = ', exactly 60 seconds long';
+    } else if (duration <= 90) {
+      durationHint = 'short 90-second piece';
+      durationSuffix = ', keep under 90 seconds';
+    } else if (duration <= 120) {
+      durationHint = 'two minute song';
+      durationSuffix = ', around 120 seconds duration';
+    }
+
+    // Include duration hint in prompt
+    if (duration <= 120) {
+      musicPrompt = '$durationHint $musicPrompt$durationSuffix';
+    }
+
+    // Add custom lyrics ONLY if user explicitly wants them and provided them
+    if (includeLyrics && lyrics != null && lyrics.isNotEmpty) {
+      musicPrompt = '$musicPrompt. Lyrics: $lyrics';
+    }
+
+    return musicPrompt;
   }
 
   /// Poll kie.ai for track completion status as webhook fallback
