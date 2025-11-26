@@ -87,16 +87,19 @@ void main() async {
           print('   Audio URL: ${track['audio_url'] ?? track['audioUrl']}');
         }
 
-        // Select the best track (for now, use first one, but log for analysis)
+        // Save all track alternatives to allow user choice
+        await _saveAllTrackAlternativesWebhook(taskId, trackDataList);
+
+        // Select the first track as the primary (default behavior)
         final trackData = trackDataList[0] as Map<String, dynamic>;
 
-        print('🎵 Selected track (first):');
+        print('🎵 Selected primary track (first):');
         print('   Title: ${trackData['title']}');
         print('   Audio URL: ${trackData['audio_url'] ?? trackData['audioUrl']}');
         print('   Image URL: ${trackData['image_url'] ?? trackData['imageUrl']}');
         print('   Duration: ${trackData['duration']}');
 
-        // Update Supabase database with completed track
+        // Update Supabase database with completed primary track
         await _updateSupabaseTrack(taskId, trackData);
 
       } else if (callbackType == 'first') {
@@ -308,5 +311,74 @@ Future<void> _updateSupabaseStatus(String taskId, String status) async {
   } catch (e) {
     print('❌ Error updating status for taskId $taskId: $e');
     print('🔍 Status update error details: ${e.runtimeType}');
+  }
+}
+
+/// Save all track alternatives from webhook to allow user choice
+Future<void> _saveAllTrackAlternativesWebhook(String baseTaskId, List trackDataList) async {
+  try {
+    print('💾 Saving ${trackDataList.length} track alternatives for taskId: $baseTaskId');
+
+    for (int i = 0; i < trackDataList.length; i++) {
+      final track = trackDataList[i] as Map<String, dynamic>;
+      final isDefault = i == 0; // First track is default
+
+      // Create unique ID for each alternative
+      final trackId = isDefault ? baseTaskId : '${baseTaskId}_alt_${i + 1}';
+
+      final audioUrl = track['audio_url'] ?? track['audioUrl'] ?? '';
+      final imageUrl = track['image_url'] ?? track['imageUrl'] ?? '';
+      final actualTitle = track['title'] ?? 'AI Generated Track ${i + 1}';
+      final duration = (track['duration'] is num) ? track['duration'].toInt() : 120;
+
+      print('   Track ${i + 1}: $actualTitle');
+      print('   Audio URL: $audioUrl');
+      print('   Duration: ${duration}s');
+      print('   Track ID: $trackId');
+
+      final alternativeTrackData = {
+        'title': actualTitle,
+        'artist': 'AI Artist',
+        'audio_url': audioUrl,
+        'cover_art_url': imageUrl,
+        'duration_seconds': duration,
+        'is_instrumental': false,
+        'metadata': {
+          'sunoId': track['id'] ?? '',
+          'prompt': track['prompt'] ?? '',
+          'model_name': track['model_name'] ?? 'V5',
+          'tags': track['tags'] ?? '',
+          'streamAudioUrl': track['stream_audio_url'] ?? track['streamAudioUrl'] ?? '',
+          'webhookReceived': true,
+          'completedAt': DateTime.now().toIso8601String(),
+          'originalTaskId': baseTaskId,
+          'alternativeIndex': i + 1,
+          'isDefault': isDefault,
+          'actualDuration': track['duration'],
+        },
+        'is_processing': false,
+        'processing_completed': true,
+        'processing_status': 'Completed via webhook - Alternative ${i + 1}',
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      // Insert each alternative track into Supabase
+      final response = await supabase
+          .from('tracks')
+          .upsert(alternativeTrackData..['id'] = trackId)
+          .select();
+
+      if (response.isNotEmpty) {
+        print('✅ Saved alternative track ${i + 1}: $actualTitle');
+      } else {
+        print('⚠️ Failed to save alternative track ${i + 1}');
+      }
+    }
+
+    print('🎵 All track alternatives saved for taskId: $baseTaskId');
+
+  } catch (e) {
+    print('❌ Error saving track alternatives: $e');
+    print('🔍 Alternative save error details: ${e.runtimeType}');
   }
 }
