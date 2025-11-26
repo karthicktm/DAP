@@ -133,11 +133,16 @@ void main() async {
     return Response.ok('Webhook service is healthy');
   });
 
+  // Migration endpoints for fixing existing tracks
+  app.get('/api/migrate/tracks', _runTrackMigration);
+  app.get('/api/migrate/status', _getMigrationStatus);
+
   // Webhook monitoring endpoint for debugging
   app.get('/api/webhook/status', (Request request) {
     final stats = {
       'server_status': 'running',
       'webhook_endpoint': '/api/webhook/music',
+      'migration_endpoint': '/api/migrate/tracks',
       'timestamp': DateTime.now().toIso8601String(),
       'supabase_connected': true, // supabase client is initialized
     };
@@ -377,5 +382,223 @@ Future<void> _saveAllTrackAlternativesWebhook(String baseTaskId, List trackDataL
   } catch (e) {
     print('❌ Error saving track alternatives: $e');
     print('🔍 Alternative save error details: ${e.runtimeType}');
+  }
+}
+
+/// Migration endpoint to fix existing tracks with corrupted metadata
+Future<Response> _runTrackMigration(Request request) async {
+  try {
+    print('🔧 Starting track metadata migration...');
+
+    final response = await supabase
+        .from('tracks')
+        .select('*')
+        .order('created_at', ascending: false);
+
+    final tracks = response as List<dynamic>;
+    print('📊 Found ${tracks.length} tracks to analyze');
+
+    int fixedCount = 0;
+    int skippedCount = 0;
+    List<Map<String, dynamic>> results = [];
+
+    for (final track in tracks) {
+      final id = track['id'];
+      final title = track['title'];
+      final artist = track['artist'];
+      final audioUrl = track['audio_url'];
+      final metadata = (track['metadata'] as Map<String, dynamic>?) ?? {};
+
+      bool needsFixing = false;
+      Map<String, dynamic> updates = {};
+      List<String> fixes = [];
+
+      // Check if this track has generic/corrupted metadata
+      if (title == 'AI Generated Track' ||
+          title?.toString().startsWith('Generating:') == true ||
+          artist == 'AI Artist' ||
+          artist == 'AI Music Generator') {
+
+        needsFixing = true;
+        fixes.add('corrupted_metadata');
+
+        final originalDescription = metadata['originalDescription'] as String?;
+        final musicPrompt = metadata['musicPrompt'] as String?;
+        final requestedGenre = metadata['requestedGenre'] as String?;
+        final requestedMood = metadata['requestedMood'] as String?;
+
+        String newTitle = 'Restored Track';
+        String newArtist = 'AI Generated';
+
+        if (originalDescription != null && originalDescription.isNotEmpty) {
+          newTitle = originalDescription.length > 50
+              ? originalDescription.substring(0, 47) + '...'
+              : originalDescription;
+        } else if (musicPrompt != null && musicPrompt.isNotEmpty) {
+          final cleanPrompt = musicPrompt
+              .replaceAll(RegExp(r'Create a \d+ second'), '')
+              .replaceAll(RegExp(r'Duration: \d+ seconds'), '')
+              .replaceAll(RegExp(r'Language: \w+'), '')
+              .trim();
+
+          if (cleanPrompt.isNotEmpty) {
+            newTitle = cleanPrompt.length > 50
+                ? cleanPrompt.substring(0, 47) + '...'
+                : cleanPrompt;
+          }
+        }
+
+        if (requestedGenre != null && requestedMood != null) {
+          newArtist = '$requestedGenre AI · $requestedMood';
+        } else if (requestedGenre != null) {
+          newArtist = '$requestedGenre AI Artist';
+        }
+
+        updates['title'] = newTitle;
+        updates['artist'] = newArtist;
+      }
+
+      // Check for missing audio URL
+      if (audioUrl == null || audioUrl.toString().isEmpty) {
+        needsFixing = true;
+        fixes.add('missing_audio_url');
+
+        final streamAudioUrl = metadata['streamAudioUrl'] as String?;
+        if (streamAudioUrl != null && streamAudioUrl.isNotEmpty) {
+          updates['audio_url'] = streamAudioUrl;
+          fixes.add('restored_audio_url');
+        }
+      }
+
+      // Apply fixes
+      if (needsFixing && updates.isNotEmpty) {
+        try {
+          await supabase
+              .from('tracks')
+              .update(updates)
+              .eq('id', id);
+
+          fixedCount++;
+          results.add({
+            'id': id,
+            'status': 'fixed',
+            'fixes': fixes,
+            'old_title': title,
+            'new_title': updates['title'],
+            'old_artist': artist,
+            'new_artist': updates['artist'],
+          });
+        } catch (e) {
+          results.add({
+            'id': id,
+            'status': 'error',
+            'error': e.toString(),
+          });
+        }
+      } else {
+        skippedCount++;
+      }
+    }
+
+    final migrationResult = {
+      'success': true,
+      'message': 'Track migration completed successfully',
+      'stats': {
+        'total_tracks': tracks.length,
+        'fixed_count': fixedCount,
+        'skipped_count': skippedCount,
+      },
+      'sample_fixes': results.where((r) => r['status'] == 'fixed').take(5).toList(),
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    print('🎉 Migration completed: $fixedCount fixed, $skippedCount skipped');
+
+    return Response.ok(
+      jsonEncode(migrationResult),
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+
+  } catch (e) {
+    print('❌ Migration error: $e');
+    return Response.internalServerError(
+      body: jsonEncode({
+        'success': false,
+        'error': e.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+      }),
+    );
+  }
+}
+
+/// Get migration status and database statistics
+Future<Response> _getMigrationStatus(Request request) async {
+  try {
+    final response = await supabase
+        .from('tracks')
+        .select('id, title, artist, audio_url')
+        .order('created_at', ascending: false);
+
+    final tracks = response as List<dynamic>;
+
+    int corruptedTracks = 0;
+    int missingAudioUrls = 0;
+    int healthyTracks = 0;
+
+    for (final track in tracks) {
+      final title = track['title'];
+      final artist = track['artist'];
+      final audioUrl = track['audio_url'];
+
+      bool isCorrupted = false;
+
+      if (title == 'AI Generated Track' ||
+          title?.toString().startsWith('Generating:') == true ||
+          artist == 'AI Artist' ||
+          artist == 'AI Music Generator') {
+        corruptedTracks++;
+        isCorrupted = true;
+      }
+
+      if (audioUrl == null || audioUrl.toString().isEmpty) {
+        missingAudioUrls++;
+        isCorrupted = true;
+      }
+
+      if (!isCorrupted) {
+        healthyTracks++;
+      }
+    }
+
+    final status = {
+      'database_stats': {
+        'total_tracks': tracks.length,
+        'healthy_tracks': healthyTracks,
+        'corrupted_metadata': corruptedTracks,
+        'missing_audio_urls': missingAudioUrls,
+      },
+      'migration_needed': corruptedTracks > 0 || missingAudioUrls > 0,
+      'migration_url': '/api/migrate/tracks',
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    return Response.ok(
+      jsonEncode(status),
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({
+        'error': e.toString(),
+        'timestamp': DateTime.now().toIso8601String(),
+      }),
+    );
   }
 }
