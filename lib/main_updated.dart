@@ -6,6 +6,7 @@ import 'screens/settings_screen.dart';
 import 'screens/ai_music_studio_screen_simple.dart';
 import 'widgets/track_list_widget.dart';
 import 'widgets/hero_section_web.dart';
+import 'widgets/live_radio_widget.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -129,7 +130,7 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
       case 2:
         return const TrackListWidget();
       case 3:
-        return _buildChatPage();
+        return const LiveRadioWidget();
       case 4:
         return const SettingsScreen();
       default:
@@ -176,40 +177,6 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
     );
   }
 
-  Widget _buildChatPage() {
-    return const SafeArea(
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.chat,
-              size: 100,
-              color: Color(0xFF14B8A6),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Live Chat',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Coming Soon - Real-time chat\nwith audio streaming',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white70,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildLogo() {
     return AnimatedBuilder(
@@ -505,8 +472,8 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
               label: 'Library',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.chat_rounded),
-              label: 'Chat',
+              icon: Icon(Icons.radio),
+              label: 'Live Radio',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings_rounded),
