@@ -10,6 +10,13 @@ import 'package:supabase/supabase.dart';
 
 late SupabaseClient supabase;
 
+// Configure CORS headers globally
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Origin, Content-Type, Authorization',
+};
+
 void main() async {
   // Initialize Supabase client
   final supabaseUrl = Platform.environment['SUPABASE_URL'] ?? '';
@@ -24,13 +31,6 @@ void main() async {
   print('✅ Supabase client initialized');
 
   final app = Router();
-
-  // Configure CORS headers
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Origin, Content-Type, Authorization',
-  };
 
   // Webhook endpoint for kie.ai music generation callbacks
   app.post('/api/webhook/music', (Request request) async {
