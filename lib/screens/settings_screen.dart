@@ -522,7 +522,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               SizedBox(height: 8),
               Text(
-                '1. Sign up at kie.ai\n2. Get your API key from dashboard\n3. Enter the key in settings',
+                '1. Sign up for AI music service\n2. Get your API key from dashboard\n3. Enter the key in settings',
                 style: TextStyle(color: Colors.white70, height: 1.4),
               ),
               SizedBox(height: 16),
@@ -577,8 +577,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               SizedBox(height: 16),
               Text(
                 'To use AI Radio Platform, you need:\n\n'
-                '1. Kie.ai Account\n'
-                '   • Sign up at https://kie.ai\n'
+                '1. AI Music Service Account\n'
+                '   • Sign up for AI music generation service\n'
                 '   • Get API key from dashboard\n'
                 '   • Cost-effective AI services\n\n'
                 '2. Supabase Account\n'

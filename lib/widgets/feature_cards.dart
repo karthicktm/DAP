@@ -237,7 +237,7 @@ class AppFeatureCards {
   static List<FeatureCardData> get defaultFeatures => [
     FeatureCardData(
       title: 'AI Music Generation',
-      description: 'Create unique tracks with advanced AI using kie.ai technology',
+      description: 'Create unique tracks with advanced AI technology',
       icon: Icons.music_note,
       gradientColors: AppColors.primaryGradient,
     ),

@@ -160,7 +160,7 @@ class AIMusicService {
         requestData['negativeTags'] = negativeTags;
       }
       if (vocalGender != null && vocalGender.isNotEmpty) {
-        // Ensure correct format for kie.ai API
+        // Ensure correct format for AI API
         requestData['vocalGender'] = vocalGender.toLowerCase() == 'male' ? 'm' :
                                    vocalGender.toLowerCase() == 'female' ? 'f' : vocalGender;
       }
@@ -182,7 +182,7 @@ class AIMusicService {
       // Check if API key is configured
       final apiKey = await SecureStorageService.getKieAiKey();
       if (apiKey == null || apiKey.isEmpty || !SecureStorageService.isValidKieAiKey(apiKey)) {
-        throw Exception('kie.ai API key not configured. Please add your API key in settings.');
+        throw Exception('AI API key not configured. Please add your API key in settings.');
       }
 
       final dio = await _dioInstance;
@@ -205,7 +205,7 @@ class AIMusicService {
           final errorCode = data['code'] ?? 'unknown';
           final errorMessage = data['msg'] ?? 'Unknown error occurred';
           Logger.log('API returned error: $errorCode - $errorMessage');
-          throw Exception('kie.ai API error ($errorCode): $errorMessage');
+          throw Exception('AI API error ($errorCode): $errorMessage');
         }
 
         // Check if response contains a taskId (kie.ai async response)
@@ -228,7 +228,7 @@ class AIMusicService {
             isInstrumental: instrumental,
             lyrics: lyrics,
             isProcessing: true,
-            processingStatus: 'Submitted to kie.ai - waiting for webhook...',
+            processingStatus: 'Submitted to AI - waiting for response...',
             processingCompleted: false,
             metadata: {
               'taskId': taskId,
@@ -281,17 +281,17 @@ class AIMusicService {
           return GeneratedTrack.fromJson(Map<String, dynamic>.from(data));
         } catch (e) {
           Logger.log('Failed to parse track response: $e');
-          throw Exception('Failed to parse kie.ai API response: $e');
+          throw Exception('Failed to parse AI API response: $e');
         }
       } else {
         // API call failed with non-200 status
         final errorMessage = response.data?['msg'] ?? 'API call failed';
         Logger.log('API call failed: ${response.statusCode} - $errorMessage');
-        throw Exception('kie.ai API error (${response.statusCode}): $errorMessage');
+        throw Exception('AI API error (${response.statusCode}): $errorMessage');
       }
     } on DioException catch (e) {
       Logger.log('Error generating music: $e');
-      throw Exception('Network error calling kie.ai API: ${e.message}');
+      throw Exception('Network error calling AI API: ${e.message}');
     } catch (e) {
       Logger.log('Unexpected error generating music: $e');
       throw Exception('Unexpected error: $e');

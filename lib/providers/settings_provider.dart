@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/secure_storage_service.dart';
+import '../constants/api_constants.dart';
 
 /// Settings state data class
 class SettingsState {
@@ -55,15 +56,33 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     _loadSettings();
   }
 
-  /// Load settings from secure storage
+  /// Load settings from secure storage with environment variable fallback
   Future<void> _loadSettings() async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final kieAiKey = await SecureStorageService.getKieAiKey();
-      final supabaseUrl = await SecureStorageService.getSupabaseUrl();
-      final supabaseKey = await SecureStorageService.getSupabaseKey();
-      final configStatus = await SecureStorageService.getConfigurationStatus();
+      // Get values from storage first
+      var kieAiKey = await SecureStorageService.getKieAiKey();
+      var supabaseUrl = await SecureStorageService.getSupabaseUrl();
+      var supabaseKey = await SecureStorageService.getSupabaseKey();
+
+      // Fallback to environment variables from Railway if storage is empty
+      kieAiKey ??= ApiConstants.kieAiApiKey != 'your_kie_ai_api_key_here'
+          ? ApiConstants.kieAiApiKey : null;
+      supabaseUrl ??= ApiConstants.supabaseUrl != 'your_supabase_url'
+          ? ApiConstants.supabaseUrl : null;
+      supabaseKey ??= ApiConstants.supabaseAnonKey != 'your_supabase_anon_key'
+          ? ApiConstants.supabaseAnonKey : null;
+
+      // Calculate configuration status based on actual values
+      final configStatus = {
+        'kie_ai': kieAiKey != null && kieAiKey.isNotEmpty &&
+                  kieAiKey != 'your_kie_ai_api_key_here',
+        'supabase_url': supabaseUrl != null && supabaseUrl.isNotEmpty &&
+                        supabaseUrl != 'your_supabase_url',
+        'supabase_key': supabaseKey != null && supabaseKey.isNotEmpty &&
+                        supabaseKey != 'your_supabase_anon_key',
+      };
 
       state = state.copyWith(
         kieAiKey: kieAiKey,
@@ -85,7 +104,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   Future<bool> updateKieAiKey(String key) async {
     if (!SecureStorageService.isValidKieAiKey(key)) {
       state = state.copyWith(
-        error: 'Invalid Kie.ai API key format',
+        error: 'Invalid AI API key format',
       );
       return false;
     }
@@ -106,7 +125,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to save Kie.ai API key: ${e.toString()}',
+        error: 'Failed to save AI API key: ${e.toString()}',
       );
       return false;
     }

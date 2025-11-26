@@ -1,16 +1,13 @@
 [build]
-builder = "DOCKERFILE"
-dockerfilePath = "./Dockerfile"
-
-[build.buildArgs]
-SUPABASE_URL = "${{SUPABASE_URL}}"
-SUPABASE_ANON_KEY = "${{SUPABASE_ANON_KEY}}"
-KIE_AI_API_KEY = "${{KIE_AI_API_KEY}}"
+builder = "nixpacks"
 
 [deploy]
+startCommand = "flutter build web --dart-define=KIE_AI_API_KEY=$KIE_AI_API_KEY --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --dart-define=RAILWAY_STATIC_URL=$RAILWAY_STATIC_URL --release --web-renderer canvaskit && cd build/web && python -m http.server $PORT"
 restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
 
-[env]
-PORT = "80"
-FLUTTER_WEB_AUTO_DETECT = "true"
-NODE_ENV = "production"
+[environments.production.variables]
+# These will be set in Railway dashboard - documented here for reference
+# KIE_AI_API_KEY = "your_actual_kie_ai_key"
+# SUPABASE_URL = "your_actual_supabase_url"
+# SUPABASE_ANON_KEY = "your_actual_supabase_key"

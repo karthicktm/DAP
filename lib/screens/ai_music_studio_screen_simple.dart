@@ -124,7 +124,7 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
                     ),
                     Text(
                       isConfigured
-                        ? 'Powered by kie.ai • Ready to create'
+                        ? 'Powered by AI • Ready to create'
                         : 'Configure API keys to start creating',
                       style: TextStyle(
                         fontSize: 14,
@@ -674,10 +674,10 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
       await Future.delayed(const Duration(milliseconds: 500));
       setState(() {
         _generationStatus = "Sending to AI model...";
-        _generationStep = "✓ Request sent to kie.ai API";
+        _generationStep = "✓ Request sent to AI API";
       });
       if (processingId != null) {
-        await _databaseService.updateProcessingStatus(processingId, "Sending to kie.ai API...");
+        await _databaseService.updateProcessingStatus(processingId, "Sending to AI API...");
       }
 
       // Call the real AI music service with actual parameters

@@ -646,7 +646,7 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
       );
 
       // Webhook-based system: processing track is already saved to database
-      // Real track will be updated via webhook when kie.ai completes generation
+      // Real track will be updated via webhook when AI service completes generation
       Logger.log('🎵 Music generation submitted successfully via webhook system');
     } catch (e) {
       // Create error track with same parameters as would have been used for processing

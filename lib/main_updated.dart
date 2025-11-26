@@ -163,7 +163,7 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
             ),
             SizedBox(height: 16),
             Text(
-              'Coming Soon - AI-powered music generation\nwith kie.ai integration',
+              'Coming Soon - AI-powered music generation\nwith advanced AI integration',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
@@ -276,7 +276,7 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
         return FadeTransition(
           opacity: _fadeController,
           child: Text(
-            'Powered by kie.ai • Big Tech Free',
+            'Powered by AI • Big Tech Free',
             style: TextStyle(
               fontSize: 16,
               color: Colors.white.withOpacity(0.7),
@@ -335,7 +335,7 @@ class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
                 const SizedBox(height: 16),
                 _buildStatusItem('Flutter SDK', '✅ 3.32.0 Ready'),
                 _buildStatusItem('Dependencies', '✅ Latest 2025'),
-                _buildStatusItem('kie.ai Ready', settings.configurationStatus['kie_ai'] == true ? '✅ Configured' : '⚠️ Needs Setup'),
+                _buildStatusItem('AI Music Ready', settings.configurationStatus['kie_ai'] == true ? '✅ Configured' : '⚠️ Needs Setup'),
                 _buildStatusItem('Supabase Ready', settings.configurationStatus['supabase_url'] == true ? '✅ Configured' : '⚠️ Needs Setup'),
                 _buildStatusItem('Settings Feature', '✅ Implemented'),
               ],
