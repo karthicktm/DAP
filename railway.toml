@@ -1,8 +1,14 @@
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "./Dockerfile.railway"
+
+[build.buildArgs]
+KIE_AI_API_KEY = "${{KIE_AI_API_KEY}}"
+SUPABASE_URL = "${{SUPABASE_URL}}"
+SUPABASE_ANON_KEY = "${{SUPABASE_ANON_KEY}}"
+RAILWAY_STATIC_URL = "${{RAILWAY_STATIC_URL}}"
 
 [deploy]
-startCommand = "flutter build web --dart-define=KIE_AI_API_KEY=$KIE_AI_API_KEY --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --dart-define=RAILWAY_STATIC_URL=$RAILWAY_STATIC_URL --release && cd build/web && python3 -m http.server $PORT"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 

@@ -24,8 +24,9 @@ kieAiKey ??= ApiConstants.kieAiApiKey != 'your_kie_ai_api_key_here'
 ```
 
 ### 3. Railway Deployment Configuration
-- **File**: `railway.toml` and `nixpacks.toml`
+- **Files**: `railway.toml` and `Dockerfile.railway`
 - **Purpose**: Ensures environment variables are passed as `--dart-define` flags during build
+- **Approach**: Custom Dockerfile with proper Flutter setup and non-root user
 - **Command**:
 ```bash
 flutter build web \
@@ -34,7 +35,11 @@ flutter build web \
   --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
   --release
 ```
-- **Fix**: Removed deprecated `--web-renderer` flag and added proper nixpacks configuration
+- **Fixes Applied**:
+  - ✅ Removed deprecated `--web-renderer` flag
+  - ✅ Created non-root user to avoid Flutter root warnings
+  - ✅ Proper working directory setup to find pubspec.yaml
+  - ✅ Custom Dockerfile for reliable Flutter builds
 
 ### 4. Build Script
 - **File**: `build_for_railway.sh`
