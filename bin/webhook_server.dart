@@ -180,17 +180,14 @@ bool _isValidKieAiWebhook(Map<String, dynamic> payload) {
 /// Update Supabase track with completed data
 Future<void> _updateSupabaseTrack(String taskId, Map<String, dynamic> trackData) async {
   try {
-    // Create the updated track data with correct field mapping
+    // Only update completion-related fields, preserve original track metadata
     final audioUrl = trackData['audio_url'] ?? trackData['audioUrl'] ?? '';
     final imageUrl = trackData['image_url'] ?? trackData['imageUrl'] ?? '';
 
     final updatedTrackData = {
-      'title': trackData['title'] ?? 'AI Generated Track',
-      'artist': 'AI Artist',
       'audio_url': audioUrl,
       'cover_art_url': imageUrl,
       'duration_seconds': (trackData['duration'] is num) ? trackData['duration'].toInt() : 120,
-      'is_instrumental': false,
       'metadata': {
         'sunoId': trackData['id'] ?? '',
         'prompt': trackData['prompt'] ?? '',
