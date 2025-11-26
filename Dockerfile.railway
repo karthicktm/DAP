@@ -33,6 +33,8 @@ COPY pubspec.yaml pubspec.lock ./
 COPY lib ./lib
 COPY web ./web
 COPY assets ./assets
+COPY .env ./
+
 RUN chown -R flutteruser:flutteruser /app
 
 # Switch to non-root user
