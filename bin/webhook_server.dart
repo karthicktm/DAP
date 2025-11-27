@@ -87,8 +87,8 @@ void main() async {
           print('   Audio URL: ${track['audio_url'] ?? track['audioUrl']}');
         }
 
-        // Save all track alternatives to allow user choice
-        await _saveAllTrackAlternativesWebhook(taskId, trackDataList);
+        // DISABLED: Save all track alternatives to prevent duplicates
+        // await _saveAllTrackAlternativesWebhook(taskId, trackDataList);
 
         // Select the first track as the primary (default behavior)
         final trackData = trackDataList[0] as Map<String, dynamic>;
