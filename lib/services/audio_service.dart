@@ -1,14 +1,27 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 
-// Mock audio service for development
 class AudioService {
+  final AudioRecorder _recorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
   bool _isRecording = false;
   bool _isPlaying = false;
+  String? _recordingPath;
+  Duration _recordingDuration = Duration.zero;
+  Timer? _recordingTimer;
 
   final StreamController<double> _recordingAmplitudeController =
       StreamController.broadcast();
   final StreamController<bool> _playbackStateController =
+      StreamController.broadcast();
+  final StreamController<Duration> _recordingDurationController =
+      StreamController.broadcast();
+  final StreamController<VoiceRecordingState> _voiceStateController =
       StreamController.broadcast();
 
   AudioService();
@@ -17,42 +30,101 @@ class AudioService {
       _recordingAmplitudeController.stream;
   Stream<bool> get playbackStateStream =>
       _playbackStateController.stream;
+  Stream<Duration> get recordingDurationStream =>
+      _recordingDurationController.stream;
+  Stream<VoiceRecordingState> get voiceStateStream =>
+      _voiceStateController.stream;
 
-  Future<String?> startRecording({String? fileName}) async {
+  Future<String?> startVoiceRecording({String? fileName}) async {
     try {
-      _isRecording = true;
+      // Check permissions
+      if (!await _recorder.hasPermission()) {
+        throw Exception('Microphone permission denied');
+      }
 
-      // Mock amplitude data for visualization
+      // Get app documents directory
+      final directory = await getApplicationDocumentsDirectory();
+      final recordingName = fileName ?? 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      _recordingPath = '${directory.path}/$recordingName';
+
+      // Start recording
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: _recordingPath!,
+      );
+
+      _isRecording = true;
+      _recordingDuration = Duration.zero;
+
+      _voiceStateController.add(VoiceRecordingState.recording);
+
+      // Start recording timer for duration tracking
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_isRecording) {
+          _recordingDuration = Duration(seconds: timer.tick);
+          _recordingDurationController.add(_recordingDuration);
+        } else {
+          timer.cancel();
+        }
+      });
+
+      // Real amplitude monitoring would require additional audio processing library
+      // For now, provide minimal amplitude simulation for UI feedback
       Timer.periodic(const Duration(milliseconds: 100), (timer) {
         if (_isRecording) {
-          final amplitude = (DateTime.now().millisecond % 100) / 100.0;
+          // Simple amplitude simulation - in production, use real audio level monitoring
+          final amplitude = 0.3 + (DateTime.now().millisecond % 50) / 100.0;
           _recordingAmplitudeController.add(amplitude);
         } else {
           timer.cancel();
         }
       });
 
-      debugPrint('Recording started: mock_recording.wav');
-      return 'mock_recording.wav';
+      debugPrint('Voice recording started: $_recordingPath');
+      return _recordingPath;
     } catch (e) {
-      debugPrint('Failed to start recording: $e');
+      debugPrint('Failed to start voice recording: $e');
+      _isRecording = false;
+      _voiceStateController.add(VoiceRecordingState.idle);
       rethrow;
     }
   }
 
-  Future<String?> stopRecording() async {
+  Future<String?> stopVoiceRecording() async {
     try {
       if (!_isRecording) {
         throw Exception('Not currently recording');
       }
 
+      // Stop recording
+      final path = await _recorder.stop();
+
       _isRecording = false;
-      debugPrint('Recording stopped: mock_recording.wav');
-      return 'mock_recording.wav';
+      _recordingTimer?.cancel();
+
+      _voiceStateController.add(VoiceRecordingState.completed);
+
+      debugPrint('Voice recording stopped: $path');
+      return path ?? _recordingPath;
     } catch (e) {
-      debugPrint('Failed to stop recording: $e');
+      debugPrint('Failed to stop voice recording: $e');
+      _isRecording = false;
+      _voiceStateController.add(VoiceRecordingState.error);
       rethrow;
     }
+  }
+
+  // Legacy method for backward compatibility
+  Future<String?> startRecording({String? fileName}) async {
+    return await startVoiceRecording(fileName: fileName);
+  }
+
+  Future<String?> stopRecording() async {
+    return await stopVoiceRecording();
   }
 
   Future<void> play() async {
@@ -110,8 +182,24 @@ class AudioService {
 
   bool get isPlaying => _isPlaying;
 
+  String? get currentRecordingPath => _recordingPath;
+  Duration get recordingDuration => _recordingDuration;
+
   Future<void> dispose() async {
+    _recordingTimer?.cancel();
+    await _recorder.dispose();
+    await _audioPlayer.dispose();
     await _recordingAmplitudeController.close();
     await _playbackStateController.close();
+    await _recordingDurationController.close();
+    await _voiceStateController.close();
   }
+}
+
+enum VoiceRecordingState {
+  idle,
+  recording,
+  completed,
+  error,
+}
 }

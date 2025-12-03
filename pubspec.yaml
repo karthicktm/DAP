@@ -30,9 +30,11 @@ dependencies:
   just_audio_web: ^0.4.16
   flutter_sound: ^9.29.13
   record: ^6.1.2
+  audioplayers: ^6.1.0
   flutter_audio_waveforms: ^1.2.1+8
   waveform_recorder: ^1.8.0
   permission_handler: ^11.3.1
+  path_provider: ^2.1.4
 
   # Networking & API
   dio: ^5.4.0

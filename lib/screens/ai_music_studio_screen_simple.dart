@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/glassmorphic_card.dart';
+import '../widgets/voice_recorder_widget.dart';
 import '../models/ai_track.dart';
 import '../widgets/music_generation_form.dart';
 import '../services/ai_music_service.dart';
+import '../services/ai_voice_service.dart';
 import '../widgets/mini_player_widget.dart';
 import '../widgets/track_list_widget.dart';
 import '../services/track_database_service.dart';
@@ -354,67 +356,62 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
   Widget _buildRecordTab() {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: GlassmorphicCard(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Text(
-              'Audio Recording Studio',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'High-quality recording with real-time waveform visualization',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            // Recording visualization placeholder
-            Container(
-              height: 120,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1B3A).withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.graphic_eq,
-                      size: 48,
-                      color: Colors.white30,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Waveform visualization',
-                      style: TextStyle(
-                        color: Colors.white30,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildRecordButton(),
-                _buildPlayButton(),
-                _buildStopButton(),
-              ],
-            ),
-          ],
-        ),
+      child: VoiceRecorderWidget(
+        onSongGenerated: (songResult) async {
+          // Convert to AITrack and save to library
+          final aiTrack = AITrack(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: 'Voice Song - ${songResult.analysis.mood}',
+            artist: 'AI Generated',
+            genre: songResult.analysis.genre,
+            mood: songResult.analysis.mood,
+            duration: const Duration(minutes: 3),
+            audioUrl: songResult.backgroundMusicUrl,
+            coverArtUrl: '',
+            createdAt: DateTime.now(),
+            isInstrumental: false,
+            metadata: {
+              'original_voice': songResult.originalVoiceRecording,
+              'transcribed_lyrics': songResult.transcribedLyrics,
+              'completed_lyrics': songResult.completedLyrics,
+              'voice_analysis': {
+                'mood': songResult.analysis.mood,
+                'genre': songResult.analysis.genre,
+                'tempo': songResult.analysis.tempo,
+                'confidence': songResult.analysis.confidence,
+              },
+              'ai_generated': true,
+              'voice_to_song': true,
+            },
+          );
+
+          // Save to database
+          try {
+            final saved = await _databaseService.saveTrack(aiTrack);
+            if (saved) {
+              _showSuccessSnackbar('🎤 Voice song created and saved: ${aiTrack.title}');
+            } else {
+              _showSuccessSnackbar('🎤 Voice song created (demo mode): ${aiTrack.title}');
+            }
+          } catch (e) {
+            _showSuccessSnackbar('🎤 Voice song created: ${aiTrack.title}');
+          }
+
+          // Add to tracks list
+          setState(() {
+            _tracks.add(aiTrack);
+          });
+
+          // Refresh library tab
+          try {
+            TrackListWidget.globalKey.currentState?.refreshTracks();
+          } catch (e) {
+            print('Failed to refresh library: $e');
+          }
+        },
+        onError: () {
+          _showErrorSnackbar('Voice recording failed. Please try again.');
+        },
       ),
     );
   }
@@ -511,77 +508,6 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
     );
   }
 
-  Widget _buildRecordButton() {
-    return Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        gradient: _isRecording
-          ? const LinearGradient(colors: [Colors.red, Colors.redAccent])
-          : const LinearGradient(colors: [Color(0xFF14B8A6), Color(0xFF10B981)]),
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: (_isRecording ? Colors.red : const Color(0xFF14B8A6)).withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _toggleRecording,
-          borderRadius: BorderRadius.circular(32),
-          child: Icon(
-            _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-            color: Colors.white,
-            size: 32,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlayButton() {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1B3A).withOpacity(0.5),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.3), width: 1),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _playRecording,
-          borderRadius: BorderRadius.circular(28),
-          child: const Icon(Icons.play_arrow_rounded, color: Color(0xFF8B5CF6), size: 28),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStopButton() {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1B3A).withOpacity(0.5),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _stopPlayback,
-          borderRadius: BorderRadius.circular(28),
-          child: Icon(Icons.stop_rounded, color: Colors.white.withOpacity(0.7), size: 24),
-        ),
-      ),
-    );
-  }
 
   Widget _buildFloatingActionButton() {
     return Container(
@@ -621,7 +547,7 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
         _generateMusic();
         break;
       case 1:
-        _toggleRecording();
+        _showMessage('Use the voice recorder below to record and generate songs!', const Color(0xFF14B8A6));
         break;
       case 2:
         _showImportDialog();
@@ -762,25 +688,20 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
     }
   }
 
-  void _toggleRecording() {
-    setState(() => _isRecording = !_isRecording);
-    if (_isRecording) {
-      _showSuccessSnackbar('Recording started');
-    } else {
-      _showSuccessSnackbar('Recording saved successfully!');
-    }
-  }
-
-  void _playRecording() {
-    _showSuccessSnackbar('Playing recording...');
-  }
-
-  void _stopPlayback() {
-    _showSuccessSnackbar('Playback stopped');
-  }
-
   void _playTrack(AITrack track) {
     _showSuccessSnackbar('Playing: ${track.title}');
+  }
+
+  void _showMessage(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   void _showImportDialog() {
