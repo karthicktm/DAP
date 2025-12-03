@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:js_interop';
+import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -14,6 +16,11 @@ class AudioService {
   String? _recordingPath;
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
+
+  // Web-specific recording
+  html.MediaRecorder? _webRecorder;
+  List<html.Blob> _recordedChunks = [];
+  html.MediaStream? _mediaStream;
 
   final StreamController<double> _recordingAmplitudeController =
       StreamController.broadcast();
@@ -37,55 +44,11 @@ class AudioService {
 
   Future<String?> startVoiceRecording({String? fileName}) async {
     try {
-      // Check permissions
-      if (!await _recorder.hasPermission()) {
-        throw Exception('Microphone permission denied');
+      if (kIsWeb) {
+        return await _startWebRecording(fileName);
+      } else {
+        return await _startNativeRecording(fileName);
       }
-
-      // Get app documents directory
-      final directory = await getApplicationDocumentsDirectory();
-      final recordingName = fileName ?? 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      _recordingPath = '${directory.path}/$recordingName';
-
-      // Start recording
-      await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
-        ),
-        path: _recordingPath!,
-      );
-
-      _isRecording = true;
-      _recordingDuration = Duration.zero;
-
-      _voiceStateController.add(VoiceRecordingState.recording);
-
-      // Start recording timer for duration tracking
-      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_isRecording) {
-          _recordingDuration = Duration(seconds: timer.tick);
-          _recordingDurationController.add(_recordingDuration);
-        } else {
-          timer.cancel();
-        }
-      });
-
-      // Real amplitude monitoring would require additional audio processing library
-      // For now, provide minimal amplitude simulation for UI feedback
-      Timer.periodic(const Duration(milliseconds: 100), (timer) {
-        if (_isRecording) {
-          // Simple amplitude simulation - in production, use real audio level monitoring
-          final amplitude = 0.3 + (DateTime.now().millisecond % 50) / 100.0;
-          _recordingAmplitudeController.add(amplitude);
-        } else {
-          timer.cancel();
-        }
-      });
-
-      debugPrint('Voice recording started: $_recordingPath');
-      return _recordingPath;
     } catch (e) {
       debugPrint('Failed to start voice recording: $e');
       _isRecording = false;
@@ -94,27 +57,159 @@ class AudioService {
     }
   }
 
+  Future<String?> _startWebRecording(String? fileName) async {
+    try {
+      // Request microphone access
+      _mediaStream = await html.window.navigator.mediaDevices!.getUserMedia({
+        'audio': true,
+      });
+
+      final recordingName = fileName ?? 'voice_${DateTime.now().millisecondsSinceEpoch}.webm';
+      _recordingPath = recordingName;
+      _recordedChunks.clear();
+
+      // Create MediaRecorder
+      _webRecorder = html.MediaRecorder(_mediaStream!, {
+        'mimeType': 'audio/webm;codecs=opus',
+      });
+
+      // Handle data available
+      _webRecorder!.addEventListener('dataavailable', (html.Event event) {
+        final blobEvent = event as html.BlobEvent;
+        if (blobEvent.data != null && blobEvent.data!.size > 0) {
+          _recordedChunks.add(blobEvent.data!);
+        }
+      });
+
+      // Start recording
+      _webRecorder!.start();
+      _isRecording = true;
+      _recordingDuration = Duration.zero;
+      _voiceStateController.add(VoiceRecordingState.recording);
+
+      _startRecordingTimer();
+      debugPrint('Web voice recording started: $_recordingPath');
+      return _recordingPath;
+    } catch (e) {
+      throw Exception('Web recording failed: $e. Please allow microphone access.');
+    }
+  }
+
+  Future<String?> _startNativeRecording(String? fileName) async {
+    // Check permissions
+    if (!await _recorder.hasPermission()) {
+      throw Exception('Microphone permission denied. Please allow microphone access.');
+    }
+
+    final directory = await getApplicationDocumentsDirectory();
+    final recordingName = fileName ?? 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    _recordingPath = '${directory.path}/$recordingName';
+
+    // Start recording with file path
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        bitRate: 128000,
+        sampleRate: 44100,
+      ),
+      path: _recordingPath!,
+    );
+
+    _isRecording = true;
+    _recordingDuration = Duration.zero;
+    _voiceStateController.add(VoiceRecordingState.recording);
+
+    _startRecordingTimer();
+    debugPrint('Native voice recording started: $_recordingPath');
+    return _recordingPath;
+  }
+
+  void _startRecordingTimer() {
+    // Start recording timer for duration tracking
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isRecording) {
+        _recordingDuration = Duration(seconds: timer.tick);
+        _recordingDurationController.add(_recordingDuration);
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // Amplitude simulation for UI feedback
+    Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (_isRecording) {
+        final amplitude = 0.3 + (DateTime.now().millisecond % 50) / 100.0;
+        _recordingAmplitudeController.add(amplitude);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
   Future<String?> stopVoiceRecording() async {
     try {
       if (!_isRecording) {
         throw Exception('Not currently recording');
       }
 
-      // Stop recording
-      final path = await _recorder.stop();
-
       _isRecording = false;
       _recordingTimer?.cancel();
 
-      _voiceStateController.add(VoiceRecordingState.completed);
-
-      debugPrint('Voice recording stopped: $path');
-      return path ?? _recordingPath;
+      if (kIsWeb) {
+        return await _stopWebRecording();
+      } else {
+        return await _stopNativeRecording();
+      }
     } catch (e) {
       debugPrint('Failed to stop voice recording: $e');
       _isRecording = false;
       _voiceStateController.add(VoiceRecordingState.error);
       rethrow;
+    }
+  }
+
+  Future<String?> _stopWebRecording() async {
+    try {
+      if (_webRecorder != null) {
+        final completer = Completer<String?>();
+
+        _webRecorder!.addEventListener('stop', (_) {
+          // Create blob from recorded chunks
+          final blob = html.Blob(_recordedChunks, 'audio/webm');
+          final url = html.Url.createObjectUrlFromBlob(blob);
+
+          _voiceStateController.add(VoiceRecordingState.completed);
+          debugPrint('Web voice recording stopped: $url');
+          completer.complete(url);
+        });
+
+        _webRecorder!.stop();
+        _mediaStream?.getTracks().forEach((track) => track.stop());
+
+        return await completer.future;
+      } else {
+        throw Exception('Web recorder not initialized');
+      }
+    } catch (e) {
+      throw Exception('Failed to stop web recording: $e');
+    }
+  }
+
+  Future<String?> _stopNativeRecording() async {
+    try {
+      final path = await _recorder.stop();
+      _voiceStateController.add(VoiceRecordingState.completed);
+
+      final finalPath = path ?? _recordingPath;
+      debugPrint('Native voice recording stopped: $finalPath');
+
+      if (finalPath == null) {
+        throw Exception('Recording failed - no audio file generated');
+      }
+
+      return finalPath;
+    } catch (e) {
+      throw Exception('Failed to stop native recording: $e');
     }
   }
 
@@ -187,6 +282,14 @@ class AudioService {
 
   Future<void> dispose() async {
     _recordingTimer?.cancel();
+
+    // Clean up web resources
+    if (kIsWeb) {
+      _mediaStream?.getTracks().forEach((track) => track.stop());
+      _webRecorder = null;
+      _recordedChunks.clear();
+    }
+
     await _recorder.dispose();
     await _audioPlayer.dispose();
     await _recordingAmplitudeController.close();

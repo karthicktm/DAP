@@ -471,8 +471,17 @@ class _VoiceRecorderWidgetState extends ConsumerState<VoiceRecorderWidget>
         _statusMessage = null;
       });
     } catch (e) {
+      String errorMessage = 'Failed to start recording: $e';
+
+      // Provide helpful error messages for common issues
+      if (e.toString().contains('permission')) {
+        errorMessage = 'Microphone permission required. Please allow access and try again.';
+      } else if (e.toString().contains('not supported')) {
+        errorMessage = 'Audio recording not supported in this browser. Try Chrome or Firefox.';
+      }
+
       setState(() {
-        _statusMessage = 'Failed to start recording: $e';
+        _statusMessage = errorMessage;
         _currentState = VoiceRecordingState.error;
       });
       widget.onError?.call();
