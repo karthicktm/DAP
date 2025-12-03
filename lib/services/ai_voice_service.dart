@@ -24,7 +24,7 @@ class AIVoiceService {
       _dio.interceptors.add(LogInterceptor(
         requestBody: false,
         responseBody: true,
-        logPrint: Logger.log,
+        logPrint: (obj) => Logger.log(obj.toString()),
       ));
     }
   }

@@ -202,4 +202,3 @@ enum VoiceRecordingState {
   completed,
   error,
 }
-}
