@@ -30,6 +30,9 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
   late final AIMusicService _aiMusicService;
   late final TrackDatabaseService _databaseService;
 
+  // Form trigger callback
+  VoidCallback? _triggerFormGeneration;
+
   // Generated tracks
   final List<AITrack> _tracks = [];
 
@@ -349,6 +352,9 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
           setState(() => _isGenerating = false);
           _showErrorSnackbar('Generation failed: $error');
         },
+        onFormReady: (triggerGeneration) {
+          _triggerFormGeneration = triggerGeneration;
+        },
       ),
     );
   }
@@ -544,7 +550,12 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
   void _onFabPressed() {
     switch (_currentTab) {
       case 0:
-        _generateMusic();
+        // Trigger form generation using actual UI inputs
+        if (_triggerFormGeneration != null) {
+          _triggerFormGeneration!();
+        } else {
+          _showErrorSnackbar('Please wait for form to load');
+        }
         break;
       case 1:
         _showMessage('Use the voice recorder below to record and generate songs!', const Color(0xFF14B8A6));
@@ -555,6 +566,8 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
     }
   }
 
+  // DEPRECATED: This method is replaced by MusicGenerationForm._generateMusic()
+  // which properly uses UI form inputs instead of hardcoded values
   Future<void> _generateMusic() async {
     final settings = ref.read(settingsProvider);
     if (!settings.isFullyConfigured) {

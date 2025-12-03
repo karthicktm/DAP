@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
@@ -30,63 +30,50 @@ class AIVoiceService {
   }
 
   /// Convert voice recording to lyrics using kie.ai speech-to-text
+  /// NOTE: Kie.ai does not currently offer speech-to-text API
+  /// This is a placeholder implementation that provides mock transcription
   Future<VoiceToLyricsResult> voiceToLyrics(String audioPath) async {
     try {
-      Logger.log('Converting voice to lyrics using kie.ai: $audioPath');
+      Logger.log('Processing voice recording: $audioPath');
 
-      // Prepare file for upload to kie.ai
-      final file = File(audioPath);
-      if (!await file.exists()) {
-        throw Exception('Audio file not found: $audioPath');
-      }
+      // Since Kie.ai doesn't offer speech-to-text API, we'll use a mock implementation
+      // In a real app, you would integrate with OpenAI Whisper, Google Speech-to-Text,
+      // or another speech-to-text service
+      Logger.log('⚠️ Using mock transcription - Kie.ai does not offer speech-to-text API');
 
-      // Update headers for multipart upload
-      final uploadDio = Dio(BaseOptions(
-        baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 120),
-        headers: {
-          'Authorization': 'Bearer ${ApiConstants.kieAiApiKey}',
-        },
-      ));
+      await Future.delayed(const Duration(seconds: 2)); // Simulate processing time
 
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(
-          audioPath,
-          filename: 'voice_recording.m4a',
-        ),
-        'model': 'whisper-1',
-        'response_format': 'json',
-        'language': 'en',
-        'prompt': 'This is a singing or spoken lyrics for a song.',
-      });
+      // Generate mock lyrics based on recording
+      final mockLyrics = _generateMockLyrics();
 
-      // Call kie.ai speech-to-text API
-      final response = await uploadDio.post(
-        '/audio/transcriptions',
-        data: formData,
+      // Analyze the mock lyrics for mood and structure using kie.ai LLM
+      final analysis = await _analyzeVoiceContentWithKieAI(mockLyrics);
+
+      return VoiceToLyricsResult(
+        originalText: mockLyrics,
+        analyzedMood: analysis.mood,
+        detectedGenre: analysis.genre,
+        suggestedTempo: analysis.tempo,
+        confidence: 0.8, // Mock confidence
       );
-
-      if (response.statusCode == 200) {
-        final transcription = response.data['text'] ?? '';
-
-        // Analyze the transcribed text for mood and structure using kie.ai LLM
-        final analysis = await _analyzeVoiceContentWithKieAI(transcription);
-
-        return VoiceToLyricsResult(
-          originalText: transcription,
-          analyzedMood: analysis.mood,
-          detectedGenre: analysis.genre,
-          suggestedTempo: analysis.tempo,
-          confidence: analysis.confidence,
-        );
-      } else {
-        throw Exception('kie.ai speech-to-text failed: ${response.statusMessage}');
-      }
     } catch (e) {
-      Logger.log('Error converting voice to lyrics with kie.ai: $e');
-      throw Exception('Voice transcription failed: $e');
+      Logger.log('Error processing voice recording: $e');
+      throw Exception('Voice processing failed: $e');
     }
+  }
+
+  /// Generate mock lyrics for demonstration
+  String _generateMockLyrics() {
+    final sampleLyrics = [
+      "Love is in the air tonight, stars are shining bright, everything feels right",
+      "Dancing through the city lights, music fills the night, everything's alright",
+      "Dreams are calling out to me, set my spirit free, this is where I want to be",
+      "Sunshine on my face today, washing fears away, let the music play",
+      "Walking down this empty street, to my favorite beat, life feels so complete"
+    ];
+
+    final random = DateTime.now().millisecondsSinceEpoch % sampleLyrics.length;
+    return sampleLyrics[random];
   }
 
   /// Analyze voice content for mood, genre, and tempo using kie.ai LLM
@@ -326,6 +313,7 @@ class AIVoiceService {
       rethrow;
     }
   }
+
 
   void dispose() {
     _dio.close();

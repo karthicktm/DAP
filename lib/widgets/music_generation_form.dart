@@ -9,6 +9,7 @@ class MusicGenerationForm extends StatefulWidget {
   final VoidCallback onGenerationStart;
   final Function(AITrack track) onGenerationComplete;
   final Function(String error) onGenerationError;
+  final Function(VoidCallback triggerGeneration)? onFormReady;
 
   const MusicGenerationForm({
     Key? key,
@@ -16,6 +17,7 @@ class MusicGenerationForm extends StatefulWidget {
     required this.onGenerationStart,
     required this.onGenerationComplete,
     required this.onGenerationError,
+    this.onFormReady,
   }) : super(key: key);
 
   @override
@@ -34,6 +36,15 @@ class _MusicGenerationFormState extends State<MusicGenerationForm> {
   bool _includeVocals = true;
   bool _generateLyrics = false;
   bool _isArabicMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Register the trigger callback with parent
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onFormReady?.call(_generateMusic);
+    });
+  }
   bool _showAdvancedOptions = false;
   String? _currentTaskId; // Store current generation taskId
 
