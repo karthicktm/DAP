@@ -638,20 +638,38 @@ Future<Response> _getMigrationStatus(Request request) async {
 
 /// Kie.ai API proxy functions for web frontend access
 
-/// Proxy file upload to kie.ai
+/// Proxy file upload to kie.ai using FormData for /api/file-stream-upload
 Future<Response> _proxyKieFileUpload(Request request) async {
   try {
     final body = await request.readAsString();
     final payload = jsonDecode(body) as Map<String, dynamic>;
 
-    final response = await http.post(
-      Uri.parse('https://api.kie.ai/api/file-base64-upload'),
-      headers: {
-        'Authorization': 'Bearer $kieAiApiKey',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(payload),
+    final audioPath = payload['audioPath'] as String;
+    final filename = payload['filename'] as String;
+
+    // Fetch the blob from the frontend
+    final blobResponse = await http.get(Uri.parse(audioPath));
+    if (blobResponse.statusCode != 200) {
+      throw Exception('Failed to fetch audio blob: ${blobResponse.statusCode}');
+    }
+
+    // Create multipart request for kie.ai
+    final multipartRequest = http.MultipartRequest(
+      'POST',
+      Uri.parse('https://api.kie.ai/api/file-stream-upload'),
     );
+
+    multipartRequest.headers['Authorization'] = 'Bearer $kieAiApiKey';
+    multipartRequest.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        blobResponse.bodyBytes,
+        filename: filename,
+      ),
+    );
+
+    final streamedResponse = await multipartRequest.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
     return Response(
       response.statusCode,

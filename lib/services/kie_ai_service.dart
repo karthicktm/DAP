@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
 import '../errors/exceptions.dart';
 import '../utils/logger.dart';
@@ -20,11 +21,11 @@ class KieAiService {
     ));
 
     // Add logging interceptor for development
-    if (!AppConstants.isProduction) {
+    if (kDebugMode) {
       _dio.interceptors.add(LogInterceptor(
         requestBody: true,
         responseBody: true,
-        logPrint: Logger.log,
+        logPrint: (obj) => Logger.log(obj.toString()),
       ));
     }
   }

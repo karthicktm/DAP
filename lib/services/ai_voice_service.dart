@@ -10,7 +10,7 @@ import '../utils/logger.dart';
 /// AI Voice Service using only kie.ai APIs for all voice and music processing
 class AIVoiceService {
   late final Dio _dio;
-  static const String _kieAiBaseUrl = 'https://api.kie.ai/v1';
+  static const String _kieAiBaseUrl = 'https://api.kie.ai';
   static const String _backendProxyUrl = 'https://dap-production-99ef.up.railway.app';
 
   AIVoiceService() {
@@ -39,45 +39,54 @@ class AIVoiceService {
     }
   }
 
-  /// Upload voice recording to kie.ai and get file ID
+  /// Upload voice recording to kie.ai and get upload URL
   Future<String> _uploadVoiceFile(String audioPath) async {
     try {
       Logger.log('Uploading voice file to kie.ai: $audioPath');
 
-      String base64Audio;
       if (kIsWeb) {
-        // For web, audioPath is a blob URL
-        final response = await html.HttpRequest.request(
-          audioPath,
-          responseType: 'arraybuffer',
+        // For web, use proxy endpoint that handles FormData
+        final endpoint = '/api/proxy/kie/file-upload';
+
+        final response = await _dio.post(
+          endpoint,
+          data: {
+            'audioPath': audioPath, // Pass blob URL to proxy
+            'filename': 'voice_recording.webm',
+          },
         );
-        final bytes = Uint8List.view(response.response);
-        base64Audio = base64Encode(bytes);
+
+        if (response.statusCode == 200) {
+          final uploadUrl = response.data['uploadUrl'];
+          Logger.log('Voice file uploaded successfully: $uploadUrl');
+          return uploadUrl;
+        } else {
+          throw Exception('File upload failed: ${response.statusMessage}');
+        }
       } else {
-        // For mobile, read file and encode
+        // For mobile, upload directly using FormData
         final file = File(audioPath);
         final bytes = await file.readAsBytes();
-        base64Audio = base64Encode(bytes);
-      }
 
-      final endpoint = kIsWeb
-          ? '/api/proxy/kie/file-upload'
-          : '/file-base64-upload';
+        final formData = FormData.fromMap({
+          'file': MultipartFile.fromBytes(
+            bytes,
+            filename: 'voice_recording.m4a',
+          ),
+        });
 
-      final response = await _dio.post(
-        endpoint,
-        data: {
-          'data': base64Audio,
-          'filename': 'voice_recording.webm',
-        },
-      );
+        final response = await _dio.post(
+          '/api/file-stream-upload',
+          data: formData,
+        );
 
-      if (response.statusCode == 200) {
-        final fileId = response.data['fileId'];
-        Logger.log('Voice file uploaded successfully: $fileId');
-        return fileId;
-      } else {
-        throw Exception('File upload failed: ${response.statusMessage}');
+        if (response.statusCode == 200) {
+          final uploadUrl = response.data['uploadUrl'];
+          Logger.log('Voice file uploaded successfully: $uploadUrl');
+          return uploadUrl;
+        } else {
+          throw Exception('File upload failed: ${response.statusMessage}');
+        }
       }
     } catch (e) {
       Logger.log('Error uploading voice file: $e');
@@ -91,10 +100,10 @@ class AIVoiceService {
       Logger.log('Processing voice recording with kie.ai Add Vocals API: $audioPath');
 
       // Step 1: Upload the voice file
-      final fileId = await _uploadVoiceFile(audioPath);
+      final uploadUrl = await _uploadVoiceFile(audioPath);
 
       // Step 2: Analyze the voice for mood and genre using LLM first
-      final analysis = await _analyzeVoiceFile(fileId);
+      final analysis = await _analyzeVoiceFile(uploadUrl);
 
       // Step 3: For now, we'll return the analysis result
       // The actual Add Vocals API will be called in generateBackgroundMusic
@@ -104,7 +113,7 @@ class AIVoiceService {
         detectedGenre: analysis.genre,
         suggestedTempo: analysis.tempo,
         confidence: analysis.confidence,
-        uploadedFileId: fileId, // Store the file ID for later use
+        uploadedFileId: uploadUrl, // Store the upload URL for later use
       );
     } catch (e) {
       Logger.log('Error processing voice recording: $e');
@@ -113,7 +122,7 @@ class AIVoiceService {
   }
 
   /// Analyze uploaded voice file for mood, genre, and tempo using kie.ai LLM
-  Future<VoiceAnalysis> _analyzeVoiceFile(String fileId) async {
+  Future<VoiceAnalysis> _analyzeVoiceFile(String uploadUrl) async {
     try {
       final endpoint = kIsWeb
           ? '/api/proxy/kie/llm-generate'
@@ -137,7 +146,7 @@ class AIVoiceService {
             },
             {
               'role': 'user',
-              'content': 'Analyze the voice recording with file ID: $fileId. Detect the mood, genre preference, and tempo from the vocal characteristics.',
+              'content': 'Analyze the voice recording at URL: $uploadUrl. Detect the mood, genre preference, and tempo from the vocal characteristics.',
             }
           ],
           'max_tokens': 100,
@@ -244,7 +253,7 @@ class AIVoiceService {
       Logger.log('Generating complete song with kie.ai Add Vocals API');
 
       if (uploadedFileId == null) {
-        throw Exception('No uploaded voice file ID provided');
+        throw Exception('No uploaded voice file URL provided');
       }
 
       // Create vocal prompt based on analysis
@@ -259,13 +268,13 @@ class AIVoiceService {
 
       final endpoint = kIsWeb
           ? '/api/proxy/kie/add-vocals'
-          : '/generate/add-vocals';
+          : '/api/v1/generate/add-vocals';
 
       final response = await _dio.post(
         endpoint,
         data: {
           'prompt': vocalPrompt,
-          'audioId': uploadedFileId,
+          'audioUrl': uploadedFileId, // Use audioUrl instead of audioId
           'model': 'V5',
           'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
         },
