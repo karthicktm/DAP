@@ -276,6 +276,8 @@ class AIVoiceService {
           'model': 'V5',
           'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
         });
+
+        endpoint = '/api/v1/generate/upload-cover';
       }
 
       final response = await _dio.post(endpoint, data: requestData);
