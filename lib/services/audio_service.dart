@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:js_interop';
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:path_provider/path_provider.dart';
+
+// Conditional imports for platform-specific functionality
+import 'dart:io' if (dart.library.html) 'dart:html';
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:flutter/foundation.dart';
 
 class AudioService {
   final AudioRecorder _recorder = AudioRecorder();
@@ -32,6 +34,20 @@ class AudioService {
       StreamController.broadcast();
 
   AudioService();
+
+  // Platform-safe directory access
+  Future<dynamic> _getDocumentsDirectory() async {
+    if (kIsWeb) {
+      throw Exception('Documents directory not available on web');
+    } else {
+      // This will only be called on non-web platforms due to conditional imports
+      try {
+        return await getApplicationDocumentsDirectory();
+      } catch (e) {
+        throw Exception('Failed to get documents directory: $e');
+      }
+    }
+  }
 
   Stream<double> get recordingAmplitudeStream =>
       _recordingAmplitudeController.stream;
@@ -96,12 +112,17 @@ class AudioService {
   }
 
   Future<String?> _startNativeRecording(String? fileName) async {
+    if (kIsWeb) {
+      throw Exception('Native recording not supported on web. Use web recording instead.');
+    }
+
     // Check permissions
     if (!await _recorder.hasPermission()) {
       throw Exception('Microphone permission denied. Please allow microphone access.');
     }
 
-    final directory = await getApplicationDocumentsDirectory();
+    // Only call getApplicationDocumentsDirectory on non-web platforms
+    final directory = await _getDocumentsDirectory();
     final recordingName = fileName ?? 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
     _recordingPath = '${directory.path}/$recordingName';
 
