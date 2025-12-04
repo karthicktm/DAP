@@ -267,6 +267,7 @@ class AIVoiceService {
           'prompt': vocalPrompt,
           'audioId': uploadedFileId,
           'model': 'V5',
+          'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
         },
       );
 
