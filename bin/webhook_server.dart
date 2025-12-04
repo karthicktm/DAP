@@ -828,53 +828,41 @@ Future<Response> _proxyKieFileUpload(Request request) async {
   }
 }
 
-/// Proxy Upload and Cover Audio to kie.ai
+/// Proxy Upload and Cover Audio to kie.ai using uploaded file URL
 Future<Response> _proxyKieUploadCover(Request request) async {
   try {
     final body = await request.readAsString();
     final payload = jsonDecode(body) as Map<String, dynamic>;
 
-    // Extract audio blob URL
-    final audioPath = payload['audioPath'] as String?;
-    if (audioPath == null) {
+    // Extract uploaded file URL
+    final uploadUrl = payload['uploadUrl'] as String?;
+    if (uploadUrl == null) {
       return Response.badRequest(
-        body: jsonEncode({'error': 'Missing audioPath in request'}),
+        body: jsonEncode({'error': 'Missing uploadUrl in request'}),
         headers: {'Content-Type': 'application/json', ...corsHeaders},
       );
     }
 
-    // For now, create a multipart request with a placeholder file
-    // In production, you'd fetch the blob data and convert it properly
-    final multipartRequest = http.MultipartRequest(
-      'POST',
+    // Create JSON request for Upload and Cover Audio API with uploaded file URL
+    final requestData = {
+      'uploadUrl': uploadUrl,
+      'prompt': payload['prompt'] as String? ?? '',
+      'style': payload['style'] as String? ?? '',
+      'title': payload['title'] as String? ?? 'AI Generated Voice Cover',
+      'customMode': payload['customMode'] ?? 'true',
+      'instrumental': payload['instrumental'] ?? 'false',
+      'model': payload['model'] as String? ?? 'V5',
+      'callBackUrl': payload['callBackUrl'] as String? ?? '',
+    };
+
+    final response = await http.post(
       Uri.parse('https://api.kie.ai/api/v1/generate/upload-cover'),
+      headers: {
+        'Authorization': 'Bearer $kieAiApiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(requestData),
     );
-
-    // Add headers
-    multipartRequest.headers.addAll({
-      'Authorization': 'Bearer $kieAiApiKey',
-    });
-
-    // Add form fields from payload
-    multipartRequest.fields['prompt'] = payload['prompt'] as String? ?? '';
-    multipartRequest.fields['style'] = payload['style'] as String? ?? '';
-    multipartRequest.fields['title'] = payload['title'] as String? ?? 'AI Generated Voice Cover';
-    multipartRequest.fields['customMode'] = payload['customMode'].toString();
-    multipartRequest.fields['instrumental'] = payload['instrumental'].toString();
-    multipartRequest.fields['model'] = payload['model'] as String? ?? 'V5';
-    multipartRequest.fields['callBackUrl'] = payload['callBackUrl'] as String? ?? '';
-
-    // Add a placeholder audio file (in production, convert blob URL to actual file)
-    multipartRequest.files.add(
-      http.MultipartFile.fromString(
-        'file',
-        'placeholder audio content', // This should be the actual audio data from blob
-        filename: 'voice_recording.webm',
-      ),
-    );
-
-    final streamedResponse = await multipartRequest.send();
-    final response = await http.Response.fromStream(streamedResponse);
 
     return Response(
       response.statusCode,

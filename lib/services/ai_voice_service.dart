@@ -228,7 +228,63 @@ class AIVoiceService {
     }
   }
 
-  /// Generate complete song using kie.ai Upload and Cover Audio API with direct file upload
+  /// Upload voice file to kie.ai file storage
+  Future<String> uploadVoiceFile(String audioPath) async {
+    try {
+      Logger.log('Uploading voice file to kie.ai file storage: $audioPath');
+
+      dynamic requestData;
+      String fileUploadUrl;
+
+      if (kIsWeb) {
+        // For web, use proxy with blob URL (proxy will fetch and upload)
+        requestData = {
+          'audioPath': audioPath,
+          'filename': 'voice_recording.webm',
+        };
+        fileUploadUrl = '/api/proxy/kie/file-upload';
+      } else {
+        // For mobile, direct upload to kie.ai
+        final audioBytes = await _getBlobBytes(audioPath);
+        requestData = FormData.fromMap({
+          'file': MultipartFile.fromBytes(
+            audioBytes,
+            filename: 'voice_recording.m4a',
+          ),
+          'fileName': 'voice_recording.m4a',
+        });
+        fileUploadUrl = 'https://kieai.redpandaai.co/api/file-stream-upload';
+      }
+
+      final response = await _dio.post(fileUploadUrl, data: requestData);
+
+      Logger.log('File upload response: ${response.data}');
+
+      // Parse response to get downloadUrl
+      final responseData = response.data;
+      if (responseData is Map<String, dynamic>) {
+        final success = responseData['success'] as bool?;
+        if (success == true) {
+          final data = responseData['data'];
+          if (data is Map<String, dynamic>) {
+            final downloadUrl = data['downloadUrl'] as String?;
+            if (downloadUrl != null && downloadUrl.isNotEmpty) {
+              Logger.log('Voice file uploaded successfully: $downloadUrl');
+              return downloadUrl;
+            }
+          }
+        }
+        throw Exception('File upload failed: ${responseData['msg'] ?? 'Unknown error'}');
+      }
+
+      throw Exception('Invalid file upload response format: ${response.data}');
+    } catch (e) {
+      Logger.log('Error uploading voice file: $e');
+      throw Exception('Voice file upload failed: $e');
+    }
+  }
+
+  /// Generate complete song using kie.ai Upload and Cover Audio API with uploaded file URL
   Future<String> generateBackgroundMusic({
     required VoiceAnalysis analysis,
     required String completedLyrics,
@@ -242,24 +298,19 @@ class AIVoiceService {
         throw Exception('No audio file path provided');
       }
 
-      // Create cover prompt based on analysis
+      // Step 1: Upload voice file to kie.ai and get URL
+      final uploadUrl = await uploadVoiceFile(uploadedFileId);
+
+      // Step 2: Create cover prompt based on analysis
       final coverPrompt = '''
       Create a ${analysis.genre} cover with ${analysis.mood} mood at ${analysis.tempo} tempo.
       Transform this voice recording into a complete song with professional background music.
       Enhance vocal quality and add harmonies. Create a radio-ready mix.
       ''';
 
-      dynamic requestData;
-      String endpoint;
-
-      // Get audio bytes for both platforms
-      final audioBytes = await _getBlobBytes(uploadedFileId);
-
-      requestData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(
-          audioBytes,
-          filename: kIsWeb ? 'voice_recording.webm' : 'voice_recording.m4a',
-        ),
+      // Step 3: Use Upload and Cover Audio API with the uploaded file URL
+      final requestData = {
+        'uploadUrl': uploadUrl,
         'prompt': coverPrompt,
         'style': '${analysis.genre}, ${analysis.mood}',
         'title': 'AI Generated Voice Cover',
@@ -267,9 +318,11 @@ class AIVoiceService {
         'instrumental': 'false',
         'model': 'V5',
         'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
-      });
+      };
 
-      endpoint = '/api/v1/generate/upload-cover';
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/upload-cover'
+          : '/api/v1/generate/upload-cover';
 
       final response = await _dio.post(endpoint, data: requestData);
 
