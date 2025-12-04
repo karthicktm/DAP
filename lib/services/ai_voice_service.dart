@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:html' as html;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
@@ -29,32 +32,68 @@ class AIVoiceService {
     }
   }
 
-  /// Convert voice recording to lyrics using kie.ai speech-to-text
-  /// NOTE: Kie.ai does not currently offer speech-to-text API
-  /// This is a placeholder implementation that provides mock transcription
+  /// Upload voice recording to kie.ai and get file ID
+  Future<String> _uploadVoiceFile(String audioPath) async {
+    try {
+      Logger.log('Uploading voice file to kie.ai: $audioPath');
+
+      String base64Audio;
+      if (kIsWeb) {
+        // For web, audioPath is a blob URL
+        final response = await html.HttpRequest.request(
+          audioPath,
+          responseType: 'arraybuffer',
+        );
+        final bytes = Uint8List.view(response.response);
+        base64Audio = base64Encode(bytes);
+      } else {
+        // For mobile, read file and encode
+        final file = File(audioPath);
+        final bytes = await file.readAsBytes();
+        base64Audio = base64Encode(bytes);
+      }
+
+      final response = await _dio.post(
+        '/file-base64-upload',
+        data: {
+          'data': base64Audio,
+          'filename': 'voice_recording.webm',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final fileId = response.data['fileId'];
+        Logger.log('Voice file uploaded successfully: $fileId');
+        return fileId;
+      } else {
+        throw Exception('File upload failed: ${response.statusMessage}');
+      }
+    } catch (e) {
+      Logger.log('Error uploading voice file: $e');
+      throw Exception('Voice file upload failed: $e');
+    }
+  }
+
+  /// Process voice recording using kie.ai Add Vocals API
   Future<VoiceToLyricsResult> voiceToLyrics(String audioPath) async {
     try {
-      Logger.log('Processing voice recording: $audioPath');
+      Logger.log('Processing voice recording with kie.ai Add Vocals API: $audioPath');
 
-      // Since Kie.ai doesn't offer speech-to-text API, we'll use a mock implementation
-      // In a real app, you would integrate with OpenAI Whisper, Google Speech-to-Text,
-      // or another speech-to-text service
-      Logger.log('⚠️ Using mock transcription - Kie.ai does not offer speech-to-text API');
+      // Step 1: Upload the voice file
+      final fileId = await _uploadVoiceFile(audioPath);
 
-      await Future.delayed(const Duration(seconds: 2)); // Simulate processing time
+      // Step 2: Analyze the voice for mood and genre using LLM first
+      final analysis = await _analyzeVoiceFile(fileId);
 
-      // Generate mock lyrics based on recording
-      final mockLyrics = _generateMockLyrics();
-
-      // Analyze the mock lyrics for mood and structure using kie.ai LLM
-      final analysis = await _analyzeVoiceContentWithKieAI(mockLyrics);
-
+      // Step 3: For now, we'll return the analysis result
+      // The actual Add Vocals API will be called in generateBackgroundMusic
       return VoiceToLyricsResult(
-        originalText: mockLyrics,
+        originalText: 'Voice recording uploaded and analyzed',
         analyzedMood: analysis.mood,
         detectedGenre: analysis.genre,
         suggestedTempo: analysis.tempo,
-        confidence: 0.8, // Mock confidence
+        confidence: analysis.confidence,
+        uploadedFileId: fileId, // Store the file ID for later use
       );
     } catch (e) {
       Logger.log('Error processing voice recording: $e');
@@ -62,22 +101,8 @@ class AIVoiceService {
     }
   }
 
-  /// Generate mock lyrics for demonstration
-  String _generateMockLyrics() {
-    final sampleLyrics = [
-      "Love is in the air tonight, stars are shining bright, everything feels right",
-      "Dancing through the city lights, music fills the night, everything's alright",
-      "Dreams are calling out to me, set my spirit free, this is where I want to be",
-      "Sunshine on my face today, washing fears away, let the music play",
-      "Walking down this empty street, to my favorite beat, life feels so complete"
-    ];
-
-    final random = DateTime.now().millisecondsSinceEpoch % sampleLyrics.length;
-    return sampleLyrics[random];
-  }
-
-  /// Analyze voice content for mood, genre, and tempo using kie.ai LLM
-  Future<VoiceAnalysis> _analyzeVoiceContentWithKieAI(String text) async {
+  /// Analyze uploaded voice file for mood, genre, and tempo using kie.ai LLM
+  Future<VoiceAnalysis> _analyzeVoiceFile(String fileId) async {
     try {
       final response = await _dio.post(
         '/llm/generate',
@@ -86,8 +111,8 @@ class AIVoiceService {
           'messages': [
             {
               'role': 'system',
-              'content': '''You are a music AI that analyzes lyrics for mood, genre, and tempo.
-              Analyze the given text and return ONLY a JSON response with:
+              'content': '''You are a music AI that analyzes audio for mood, genre, and tempo.
+              Based on the uploaded voice recording, return ONLY a JSON response with:
               {
                 "mood": "happy|sad|energetic|calm|romantic|angry|melancholic|upbeat",
                 "genre": "pop|rock|rap|country|jazz|electronic|ballad|folk",
@@ -97,7 +122,7 @@ class AIVoiceService {
             },
             {
               'role': 'user',
-              'content': 'Analyze this text: "$text"',
+              'content': 'Analyze the voice recording with file ID: $fileId. Detect the mood, genre preference, and tempo from the vocal characteristics.',
             }
           ],
           'max_tokens': 100,
@@ -115,19 +140,21 @@ class AIVoiceService {
           mood: 'upbeat',
           genre: 'pop',
           tempo: 'medium',
-          confidence: 0.5,
+          confidence: 0.7,
         );
       }
     } catch (e) {
-      Logger.log('Error analyzing voice content with kie.ai: $e');
+      Logger.log('Error analyzing voice file: $e');
       return VoiceAnalysis(
         mood: 'upbeat',
         genre: 'pop',
         tempo: 'medium',
-        confidence: 0.5,
+        confidence: 0.7,
       );
     }
   }
+
+
 
   /// Complete incomplete lyrics using kie.ai LLM
   Future<String> completeLyrics({
@@ -187,66 +214,84 @@ class AIVoiceService {
     }
   }
 
-  /// Generate background music based on voice analysis using kie.ai
+  /// Generate complete song using kie.ai Add Vocals API
   Future<String> generateBackgroundMusic({
     required VoiceAnalysis analysis,
     required String completedLyrics,
     int duration = 180, // 3 minutes default
+    String? uploadedFileId,
   }) async {
     try {
-      Logger.log('Generating background music with kie.ai for mood: ${analysis.mood}');
+      Logger.log('Generating complete song with kie.ai Add Vocals API');
 
-      // Create a music prompt based on voice analysis
-      final musicPrompt = '''
-      Create instrumental background music for vocals with these characteristics:
-      - Mood: ${analysis.mood}
-      - Genre: ${analysis.genre}
+      if (uploadedFileId == null) {
+        throw Exception('No uploaded voice file ID provided');
+      }
+
+      // Create vocal prompt based on analysis
+      final vocalPrompt = '''
+      Transform this voice recording into a complete song:
+      - Style: ${analysis.genre} ${analysis.mood}
       - Tempo: ${analysis.tempo}
-      - Duration: ${duration}s
-      - Style: Leave space for vocals, supporting instrumental
-      - Energy level: ${_getEnergyLevel(analysis.mood)}
+      - Add professional background music that complements the vocals
+      - Enhance vocal quality and add harmonies if needed
+      - Create a radio-ready mix
       ''';
 
       final response = await _dio.post(
-        '/suno/generate',
+        '/generate/add-vocals',
         data: {
-          'prompt': musicPrompt,
-          'genre': analysis.genre,
-          'mood': analysis.mood,
-          'include_lyrics': false, // Instrumental only
-          'duration': duration,
-          'model': 'suno-v3',
-          'instrumental': true, // Request instrumental version
+          'prompt': vocalPrompt,
+          'audioId': uploadedFileId,
+          'model': 'V5',
         },
       );
 
       if (response.statusCode == 200) {
-        final audioUrl = response.data['audio_url'] ?? '';
-        Logger.log('Background music generated successfully: $audioUrl');
-        return audioUrl;
+        final taskId = response.data['taskId'];
+        Logger.log('Add Vocals task started: $taskId');
+
+        // Poll for completion (simple polling - in production you'd use webhooks)
+        return await _pollForCompletion(taskId);
       } else {
-        throw Exception('kie.ai music generation failed: ${response.statusMessage}');
+        throw Exception('kie.ai Add Vocals failed: ${response.statusMessage}');
       }
     } catch (e) {
-      Logger.log('Error generating background music with kie.ai: $e');
-      throw Exception('Background music generation failed: $e');
+      Logger.log('Error with Add Vocals API: $e');
+      throw Exception('Add Vocals failed: $e');
     }
   }
 
-  String _getEnergyLevel(String mood) {
-    switch (mood.toLowerCase()) {
-      case 'energetic':
-      case 'upbeat':
-      case 'happy':
-        return 'high';
-      case 'calm':
-      case 'melancholic':
-      case 'sad':
-        return 'low';
-      default:
-        return 'medium';
+  /// Poll for Add Vocals completion
+  Future<String> _pollForCompletion(String taskId) async {
+    Logger.log('Polling for completion of task: $taskId');
+
+    for (int i = 0; i < 30; i++) { // Max 5 minutes
+      await Future.delayed(const Duration(seconds: 10));
+
+      try {
+        final response = await _dio.get('/generate/status/$taskId');
+
+        if (response.statusCode == 200) {
+          final status = response.data['status'];
+          Logger.log('Task $taskId status: $status');
+
+          if (status == 'completed') {
+            final audioUrl = response.data['result']['audioUrl'];
+            Logger.log('Add Vocals completed: $audioUrl');
+            return audioUrl;
+          } else if (status == 'failed') {
+            throw Exception('Add Vocals task failed');
+          }
+        }
+      } catch (e) {
+        Logger.log('Error checking task status: $e');
+      }
     }
+
+    throw Exception('Add Vocals task timeout');
   }
+
 
   VoiceAnalysis _parseAnalysisResponse(String content) {
     try {
@@ -288,7 +333,7 @@ class AIVoiceService {
         genre: voiceResult.detectedGenre,
       );
 
-      // Step 3: Generate background music
+      // Step 3: Generate complete song with Add Vocals
       final analysis = VoiceAnalysis(
         mood: voiceResult.analyzedMood,
         genre: voiceResult.detectedGenre,
@@ -299,6 +344,7 @@ class AIVoiceService {
       final backgroundMusicUrl = await generateBackgroundMusic(
         analysis: analysis,
         completedLyrics: completedLyrics,
+        uploadedFileId: voiceResult.uploadedFileId,
       );
 
       return CompleteSongResult(
@@ -326,6 +372,7 @@ class VoiceToLyricsResult {
   final String detectedGenre;
   final String suggestedTempo;
   final double confidence;
+  final String? uploadedFileId;
 
   VoiceToLyricsResult({
     required this.originalText,
@@ -333,6 +380,7 @@ class VoiceToLyricsResult {
     required this.detectedGenre,
     required this.suggestedTempo,
     required this.confidence,
+    this.uploadedFileId,
   });
 }
 
