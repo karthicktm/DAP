@@ -207,6 +207,30 @@ void main() async {
     return Response.ok('Webhook service is healthy');
   });
 
+  // IP discovery endpoint - check Railway's outgoing IP
+  app.get('/api/debug/ip', (Request request) async {
+    try {
+      // Use a service that returns our public IP
+      final response = await http.get(Uri.parse('https://httpbin.org/ip'));
+      final ipData = jsonDecode(response.body);
+      final publicIp = ipData['origin'];
+
+      return Response.ok(
+        jsonEncode({
+          'railway_outgoing_ip': publicIp,
+          'message': 'Add this IP to kie.ai whitelist',
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+        headers: {'Content-Type': 'application/json', ...corsHeaders},
+      );
+    } catch (e) {
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to get IP: $e'}),
+        headers: {'Content-Type': 'application/json', ...corsHeaders},
+      );
+    }
+  });
+
   // Migration endpoints for fixing existing tracks
   app.get('/api/migrate/tracks', _runTrackMigration);
   app.get('/api/migrate/status', _getMigrationStatus);
