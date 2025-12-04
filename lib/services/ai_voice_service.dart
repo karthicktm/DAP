@@ -43,8 +43,8 @@ class AIVoiceService {
       Logger.log('Preparing voice file for Upload and Cover Audio: $audioPath');
 
       if (kIsWeb) {
-        // For web, return blob URL directly - proxy will handle the conversion
-        return audioPath;
+        // For web, we need to convert blob URL to bytes using JavaScript
+        return await _getBlobBytes(audioPath);
       } else {
         // For mobile, prepare file for direct multipart upload
         final file = File(audioPath);
@@ -57,6 +57,27 @@ class AIVoiceService {
     } catch (e) {
       Logger.log('Error preparing voice file: $e');
       throw Exception('Voice file preparation failed: $e');
+    }
+  }
+
+  /// Convert blob URL to bytes for web platform or read file for mobile
+  Future<List<int>> _getBlobBytes(String audioPath) async {
+    if (kIsWeb) {
+      try {
+        // Use native JavaScript to fetch blob data
+        final response = await _dio.get(
+          audioPath,
+          options: Options(responseType: ResponseType.bytes)
+        );
+        return response.data as List<int>;
+      } catch (e) {
+        Logger.log('Failed to convert blob to bytes: $e');
+        throw Exception('Failed to convert web audio blob to bytes: $e');
+      }
+    } else {
+      // For mobile, read file directly
+      final file = File(audioPath);
+      return await file.readAsBytes();
     }
   }
 
@@ -231,54 +252,24 @@ class AIVoiceService {
       dynamic requestData;
       String endpoint;
 
-      if (kIsWeb) {
-        // For web, create temporary file from blob URL and upload directly
-        try {
-          // Fetch blob data from URL
-          final response = await _dio.get(uploadedFileId, options: Options(responseType: ResponseType.bytes));
-          final audioBytes = response.data as List<int>;
+      // Get audio bytes for both platforms
+      final audioBytes = await _getBlobBytes(uploadedFileId);
 
-          requestData = FormData.fromMap({
-            'file': MultipartFile.fromBytes(
-              audioBytes,
-              filename: 'voice_recording.webm',
-            ),
-            'prompt': coverPrompt,
-            'style': '${analysis.genre}, ${analysis.mood}',
-            'title': 'AI Generated Voice Cover',
-            'customMode': 'true',
-            'instrumental': 'false',
-            'model': 'V5',
-            'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
-          });
+      requestData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          audioBytes,
+          filename: kIsWeb ? 'voice_recording.webm' : 'voice_recording.m4a',
+        ),
+        'prompt': coverPrompt,
+        'style': '${analysis.genre}, ${analysis.mood}',
+        'title': 'AI Generated Voice Cover',
+        'customMode': 'true',
+        'instrumental': 'false',
+        'model': 'V5',
+        'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
+      });
 
-          // Use direct API call for web too, bypassing proxy
-          endpoint = '/api/v1/generate/upload-cover';
-        } catch (e) {
-          Logger.log('Failed to fetch blob data: $e');
-          throw Exception('Failed to process web audio recording: $e');
-        }
-      } else {
-        // For mobile, prepare multipart form data with direct file upload
-        final file = File(uploadedFileId);
-        final bytes = await file.readAsBytes();
-
-        requestData = FormData.fromMap({
-          'file': MultipartFile.fromBytes(
-            bytes,
-            filename: 'voice_recording.m4a',
-          ),
-          'prompt': coverPrompt,
-          'style': '${analysis.genre}, ${analysis.mood}',
-          'title': 'AI Generated Voice Cover',
-          'customMode': 'true',
-          'instrumental': 'false',
-          'model': 'V5',
-          'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
-        });
-
-        endpoint = '/api/v1/generate/upload-cover';
-      }
+      endpoint = '/api/v1/generate/upload-cover';
 
       final response = await _dio.post(endpoint, data: requestData);
 
