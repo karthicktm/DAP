@@ -181,6 +181,19 @@ void main() async {
     return Response.ok('', headers: corsHeaders);
   });
 
+  // Additional specific CORS handlers for each endpoint
+  app.options('/api/proxy/kie/file-upload', (Request request) {
+    return Response.ok('', headers: corsHeaders);
+  });
+
+  app.options('/api/proxy/kie/add-vocals', (Request request) {
+    return Response.ok('', headers: corsHeaders);
+  });
+
+  app.options('/api/proxy/kie/llm-generate', (Request request) {
+    return Response.ok('', headers: corsHeaders);
+  });
+
   // Start the server
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final server = await io.serve(
