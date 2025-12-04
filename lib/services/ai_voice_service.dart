@@ -228,11 +228,8 @@ class AIVoiceService {
       Enhance vocal quality and add harmonies. Create a radio-ready mix.
       ''';
 
-      final endpoint = kIsWeb
-          ? '/api/proxy/kie/upload-cover'
-          : '/api/v1/generate/upload-cover';
-
       dynamic requestData;
+      String endpoint;
 
       if (kIsWeb) {
         // For web, create temporary file from blob URL and upload directly
