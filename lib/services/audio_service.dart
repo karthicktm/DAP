@@ -5,9 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 
-// Conditional imports for platform-specific functionality
+// Only import path_provider on non-web platforms
 import 'dart:io' if (dart.library.html) 'dart:html';
-import 'package:path_provider/path_provider.dart' if (dart.library.html) 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart' if (dart.library.html) 'audio_service_web_stub.dart';
 
 class AudioService {
   final AudioRecorder _recorder = AudioRecorder();
