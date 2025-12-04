@@ -269,13 +269,24 @@ class AIVoiceService {
       final response = await _dio.post(endpoint, data: requestData);
 
       if (response.statusCode == 200) {
-        final taskId = response.data['data']['taskId'];
-        Logger.log('Upload and Cover Audio task started: $taskId');
+        Logger.log('Upload and Cover Audio response: ${response.data}');
 
-        // Return task ID - results will come via callback
-        return taskId;
+        // Safely extract taskId with null checks
+        final data = response.data;
+        if (data is Map<String, dynamic>) {
+          final taskData = data['data'];
+          if (taskData is Map<String, dynamic>) {
+            final taskId = taskData['taskId'] as String?;
+            if (taskId != null) {
+              Logger.log('Upload and Cover Audio task started: $taskId');
+              return taskId;
+            }
+          }
+        }
+
+        throw Exception('Invalid response format: ${response.data}');
       } else {
-        throw Exception('kie.ai Upload and Cover Audio failed: ${response.statusMessage}');
+        throw Exception('kie.ai Upload and Cover Audio failed: ${response.statusCode} ${response.statusMessage}');
       }
     } catch (e) {
       Logger.log('Error with Upload and Cover Audio API: $e');
