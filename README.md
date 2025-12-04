@@ -271,4 +271,4 @@ For support and questions:
 
 ---
 
-Built with ❤️ using Flutter, kie.ai, Supabase, and PocketBase
+Built with ❤️ using Flutter, kie.ai, Supabase, and PocketBase# Force Railway redeploy Thu Dec  4 18:31:21 CET 2025
