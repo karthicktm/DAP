@@ -225,10 +225,10 @@ class AIVoiceService {
     }
   }
 
-  /// Upload voice file to kie.ai file storage
-  Future<String> uploadVoiceFile(String audioPath) async {
+  /// Upload voice file to kie.ai file storage and return taskId for WAV conversion
+  Future<WavConversionResult> uploadVoiceFileForWavConversion(String audioPath) async {
     try {
-      Logger.log('Uploading voice file to kie.ai file storage: $audioPath');
+      Logger.log('Uploading voice file for WAV conversion: $audioPath');
 
       dynamic requestData;
       String fileUploadUrl;
@@ -250,7 +250,7 @@ class AIVoiceService {
           ),
           'fileName': 'voice_recording.m4a',
         });
-        fileUploadUrl = 'https://kieai.redpandaai.co/api/file-stream-upload';
+        fileUploadUrl = '/api/file-stream-upload';
       }
 
       final response = await _dio.post(fileUploadUrl, data: requestData);
@@ -267,7 +267,15 @@ class AIVoiceService {
             final downloadUrl = data['downloadUrl'] as String?;
             if (downloadUrl != null && downloadUrl.isNotEmpty) {
               Logger.log('Voice file uploaded successfully: $downloadUrl');
-              return downloadUrl;
+
+              // Start WAV conversion
+              final wavTaskId = await convertToWav(audioPath: audioPath, audioUrl: downloadUrl);
+
+              return WavConversionResult(
+                downloadUrl: downloadUrl,
+                wavTaskId: wavTaskId,
+                status: 'processing',
+              );
             }
           }
         }
@@ -278,6 +286,184 @@ class AIVoiceService {
     } catch (e) {
       Logger.log('Error uploading voice file: $e');
       throw Exception('Voice file upload failed: $e');
+    }
+  }
+
+  /// Check WAV conversion status
+  Future<WavConversionStatus> getWavConversionStatus(String wavTaskId) async {
+    try {
+      Logger.log('Checking WAV conversion status for taskId: $wavTaskId');
+
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/get-wav-details'
+          : '/api/v1/wav/get-wav-details';
+
+      final response = await _dio.post(
+        endpoint,
+        data: {
+          'task_id': wavTaskId, // Use snake_case parameter naming
+        },
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      Logger.log('WAV status response: ${response.data}');
+
+      if (response.statusCode == 200) {
+        final responseData = response.data;
+
+        // Try multiple common response formats
+        String? status;
+        String? wavUrl;
+        String? message;
+
+        // Format 1: {"success": true, "data": {"status": "...", "wav_url": "..."}}
+        if (responseData['success'] == true && responseData['data'] != null) {
+          final data = responseData['data'];
+          status = data['status'] ?? data['state'];
+          wavUrl = data['wav_url'] ?? data['audio_url'] ?? data['output_url'];
+          message = data['message'] ?? data['status_message'];
+        }
+
+        // Format 2: {"code": 200, "data": {"status": "...", "wavUrl": "..."}}
+        else if (responseData['code'] == 200 && responseData['data'] != null) {
+          final data = responseData['data'];
+          status = data['status'] ?? data['state'];
+          wavUrl = data['wavUrl'] ?? data['audioUrl'] ?? data['outputUrl'];
+          message = data['message'] ?? data['statusMessage'];
+        }
+
+        // Format 3: {"status": "...", "wav_url": "..."} (direct)
+        else {
+          status = responseData['status'] ?? responseData['state'];
+          wavUrl = responseData['wav_url'] ?? responseData['audio_url'] ?? responseData['output_url'];
+          message = responseData['message'] ?? responseData['status_message'];
+        }
+
+        // Normalize status values
+        String normalizedStatus = status?.toLowerCase() ?? 'unknown';
+        if (normalizedStatus == 'completed' || normalizedStatus == 'finished' || normalizedStatus == 'done') {
+          normalizedStatus = 'success';
+        } else if (normalizedStatus == 'processing' || normalizedStatus == 'working' || normalizedStatus == 'converting') {
+          normalizedStatus = 'processing';
+        } else if (normalizedStatus == 'queued' || normalizedStatus == 'pending' || normalizedStatus == 'waiting') {
+          normalizedStatus = 'pending';
+        } else if (normalizedStatus == 'failed' || normalizedStatus == 'error') {
+          normalizedStatus = 'error';
+        }
+
+        return WavConversionStatus(
+          taskId: wavTaskId,
+          status: normalizedStatus,
+          wavUrl: wavUrl ?? '',
+          message: message ?? '',
+        );
+      } else {
+        return WavConversionStatus(
+          taskId: wavTaskId,
+          status: 'error',
+          message: 'HTTP ${response.statusCode}: ${response.statusMessage}',
+        );
+      }
+    } on DioException catch (e) {
+      Logger.log('❌ DioException checking WAV status: ${e.response?.data}');
+      final errorMessage = e.response?.data?['message'] ??
+                         e.response?.data?['error'] ??
+                         e.message ??
+                         'Network error checking WAV status';
+      return WavConversionStatus(
+        taskId: wavTaskId,
+        status: 'error',
+        message: errorMessage,
+      );
+    } catch (e) {
+      Logger.log('❌ Unexpected error checking WAV status: $e');
+      return WavConversionStatus(
+        taskId: wavTaskId,
+        status: 'error',
+        message: e.toString(),
+      );
+    }
+  }
+
+  /// Convert uploaded file to WAV format
+  Future<String> convertToWav({required String audioPath, required String audioUrl}) async {
+    try {
+      Logger.log('Converting audio to WAV format: audioPath=$audioPath, audioUrl=$audioUrl');
+
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/convert-wav'
+          : '/api/v1/wav/generate';
+
+      final requestData = {
+        'audio_url': audioUrl, // Standard snake_case parameter naming
+        'callback_url': 'https://dap-production-99ef.up.railway.app/api/webhook/wav',
+        'format': 'wav', // Explicitly specify output format
+        'quality': 'high', // Add quality parameter
+      };
+
+      final response = await _dio.post(
+        endpoint,
+        data: requestData,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      Logger.log('WAV conversion response: ${response.data}');
+
+      // Handle standard API response formats
+      if (response.statusCode == 200) {
+        final responseData = response.data;
+
+        // Try multiple common response formats
+        String? taskId;
+
+        // Format 1: {"success": true, "data": {"task_id": "..."}}
+        if (responseData['success'] == true &&
+            responseData['data'] != null &&
+            responseData['data']['task_id'] != null) {
+          taskId = responseData['data']['task_id'];
+        }
+
+        // Format 2: {"code": 200, "data": {"taskId": "..."}}
+        else if (responseData['code'] == 200 &&
+                 responseData['data'] != null &&
+                 responseData['data']['taskId'] != null) {
+          taskId = responseData['data']['taskId'];
+        }
+
+        // Format 3: {"task_id": "..."} (direct)
+        else if (responseData['task_id'] != null) {
+          taskId = responseData['task_id'];
+        }
+
+        if (taskId != null && taskId.isNotEmpty) {
+          Logger.log('✅ WAV conversion task started: $taskId');
+          return taskId;
+        }
+
+        throw Exception('Invalid response format: missing taskId');
+      } else {
+        throw Exception('API request failed with status: ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      Logger.log('❌ DioException in WAV conversion: ${e.response?.data}');
+      final errorMessage = e.response?.data?['message'] ??
+                         e.response?.data?['error'] ??
+                         e.message ??
+                         'Network error during WAV conversion';
+      throw Exception('WAV conversion failed: $errorMessage');
+    } catch (e) {
+      Logger.log('❌ Unexpected error in WAV conversion: $e');
+      throw Exception('WAV conversion failed: $e');
     }
   }
 
@@ -295,8 +481,8 @@ class AIVoiceService {
         throw Exception('No audio file path provided');
       }
 
-      // Step 1: Upload voice file to kie.ai and get URL
-      final uploadUrl = await uploadVoiceFile(uploadedFileId);
+      // Step 1: Use the uploaded WAV file URL directly
+      final uploadUrl = uploadedFileId; // This should already be the WAV URL
 
       // Step 2: Create cover prompt based on analysis
       final coverPrompt = '''
@@ -307,86 +493,85 @@ class AIVoiceService {
 
       // Step 3: Use Upload and Cover Audio API with the uploaded file URL
       final requestData = {
-        'uploadUrl': uploadUrl,
-        'prompt': coverPrompt,
+        'upload_url': uploadUrl, // Use snake_case parameter naming
+        'prompt': coverPrompt.trim(),
         'style': '${analysis.genre}, ${analysis.mood}',
         'title': 'AI Generated Voice Cover',
-        'customMode': 'true',
-        'instrumental': 'false',
+        'custom_mode': true, // Use boolean instead of string
+        'instrumental': false, // Use boolean instead of string
         'model': 'V5',
-        'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
+        'callback_url': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
+        'duration': 180, // Add duration parameter
+        'quality': 'high', // Add quality parameter
       };
 
       final endpoint = kIsWeb
           ? '/api/proxy/kie/upload-cover'
           : '/api/v1/generate/upload-cover';
 
-      final response = await _dio.post(endpoint, data: requestData);
+      final response = await _dio.post(
+        endpoint,
+        data: requestData,
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
 
       Logger.log('Upload and Cover Audio response: ${response.data}');
 
-      // Handle kie.ai response format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
-      final responseData = response.data;
-      if (responseData is Map<String, dynamic>) {
-        final code = responseData['code'] as int?;
-        final msg = responseData['msg'] as String?;
+      // Handle multiple response formats
+      if (response.statusCode == 200) {
+        final responseData = response.data;
 
-        if (code == 200) {
-          final data = responseData['data'];
-          if (data is Map<String, dynamic>) {
-            final taskId = data['taskId'] as String?;
-            if (taskId != null && taskId.isNotEmpty) {
-              Logger.log('Upload and Cover Audio task started: $taskId');
-              return taskId;
-            }
-          }
-          throw Exception('Missing taskId in response: ${responseData}');
-        } else {
-          throw Exception('kie.ai API error (code: $code): $msg');
+        // Try multiple common response formats
+        String? taskId;
+
+        // Format 1: {"success": true, "data": {"task_id": "..."}}
+        if (responseData['success'] == true &&
+            responseData['data'] != null &&
+            responseData['data']['task_id'] != null) {
+          taskId = responseData['data']['task_id'];
         }
-      }
 
-      throw Exception('Invalid response format: ${response.data}');
+        // Format 2: {"code": 200, "data": {"taskId": "..."}}
+        else if (responseData['code'] == 200 &&
+                 responseData['data'] != null &&
+                 responseData['data']['taskId'] != null) {
+          taskId = responseData['data']['taskId'];
+        }
+
+        // Format 3: {"task_id": "..."} (direct)
+        else if (responseData['task_id'] != null) {
+          taskId = responseData['task_id'];
+        }
+
+        if (taskId != null && taskId.isNotEmpty) {
+          Logger.log('✅ Upload and Cover Audio task started: $taskId');
+          return taskId;
+        }
+
+        throw Exception('Invalid response format: missing taskId in ${responseData.keys}');
+      } else {
+        throw Exception('API request failed with status: ${response.statusCode} - ${response.statusMessage}');
+      }
+    } on DioException catch (e) {
+      Logger.log('❌ DioException in Upload and Cover Audio: ${e.response?.data}');
+      final errorMessage = e.response?.data?['message'] ??
+                         e.response?.data?['error'] ??
+                         e.response?.data?['msg'] ??
+                         e.message ??
+                         'Network error during music generation';
+      throw Exception('Upload and Cover Audio failed: $errorMessage');
     } catch (e) {
-      Logger.log('Error with Upload and Cover Audio API: $e');
+      Logger.log('❌ Unexpected error in Upload and Cover Audio: $e');
       throw Exception('Upload and Cover Audio failed: $e');
     }
   }
 
-  /// Convert generated music to WAV format using kie.ai WAV conversion API
-  Future<String> convertToWav({
-    required String taskId,
-    required String audioId,
-  }) async {
-    try {
-      Logger.log('Converting music to WAV format: taskId=$taskId, audioId=$audioId');
-
-      final endpoint = kIsWeb
-          ? '/api/proxy/kie/convert-wav'
-          : '/api/v1/wav/generate';
-
-      final response = await _dio.post(
-        endpoint,
-        data: {
-          'taskId': taskId,
-          'audioId': audioId,
-          'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/wav',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final wavTaskId = response.data['data']['taskId'];
-        Logger.log('WAV conversion task started: $wavTaskId');
-        return wavTaskId;
-      } else {
-        throw Exception('kie.ai WAV conversion failed: ${response.statusMessage}');
-      }
-    } catch (e) {
-      Logger.log('Error with WAV conversion API: $e');
-      throw Exception('WAV conversion failed: $e');
-    }
-  }
-
+  
   VoiceAnalysis _parseAnalysisResponse(String content) {
     try {
       // Simple JSON parsing (in production, use proper JSON parsing)
@@ -508,4 +693,36 @@ class CompleteSongResult {
     required this.analysis,
     this.finalMixedSongUrl,
   });
+}
+
+/// WAV conversion result
+class WavConversionResult {
+  final String downloadUrl;
+  final String wavTaskId;
+  final String status;
+
+  WavConversionResult({
+    required this.downloadUrl,
+    required this.wavTaskId,
+    required this.status,
+  });
+}
+
+/// WAV conversion status
+class WavConversionStatus {
+  final String taskId;
+  final String status; // pending, processing, success, error
+  final String wavUrl;
+  final String message;
+
+  WavConversionStatus({
+    required this.taskId,
+    required this.status,
+    this.wavUrl = '',
+    this.message = '',
+  });
+
+  bool get isCompleted => status == 'success';
+  bool get isProcessing => status == 'processing' || status == 'pending';
+  bool get hasError => status == 'error';
 }

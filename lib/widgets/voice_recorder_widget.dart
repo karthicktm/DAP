@@ -35,6 +35,11 @@ class _VoiceRecorderWidgetState extends ConsumerState<VoiceRecorderWidget>
   String? _statusMessage;
   CompleteSongResult? _songResult;
 
+  // WAV conversion states
+  WavConversionResult? _wavConversionResult;
+  WavConversionStatus? _wavStatus;
+  bool _isPollingWavStatus = false;
+
   @override
   void initState() {
     super.initState();
@@ -263,13 +268,31 @@ class _VoiceRecorderWidgetState extends ConsumerState<VoiceRecorderWidget>
         ],
 
         if (_currentState == VoiceRecordingState.completed && !_isProcessing) ...[
-          _buildControlButton(
-            icon: Icons.auto_awesome,
-            label: 'Generate Song',
-            onPressed: _processSong,
-            color: const Color(0xFF14B8A6),
-          ),
-          const SizedBox(width: 16),
+          // Show status or appropriate button based on WAV conversion state
+          if (_wavStatus?.isCompleted == true) ...[
+            _buildControlButton(
+              icon: Icons.auto_awesome,
+              label: 'Generate Music',
+              onPressed: _generateMusicWithWav,
+              color: const Color(0xFF14B8A6),
+            ),
+            const SizedBox(width: 16),
+          ] else if (_wavConversionResult != null && _wavStatus?.isProcessing == true) ...[
+            _buildControlButton(
+              icon: Icons.hourglass_empty,
+              label: 'Converting to WAV...',
+              onPressed: null, // Disabled during processing
+              color: Colors.grey,
+            ),
+          ] else if (_wavConversionResult == null) ...[
+            _buildControlButton(
+              icon: Icons.file_upload,
+              label: 'Convert to WAV',
+              onPressed: _uploadAndConvertToWav,
+              color: const Color(0xFF14B8A6),
+            ),
+            const SizedBox(width: 16),
+          ],
           _buildControlButton(
             icon: Icons.refresh,
             label: 'Record Again',
@@ -513,7 +536,8 @@ class _VoiceRecorderWidgetState extends ConsumerState<VoiceRecorderWidget>
     Logger.log('Pause recording requested');
   }
 
-  Future<void> _processSong() async {
+  // New method to upload and convert to WAV
+  Future<void> _uploadAndConvertToWav() async {
     try {
       final recordingPath = _audioService.currentRecordingPath;
       if (recordingPath == null) {
@@ -522,28 +546,154 @@ class _VoiceRecorderWidgetState extends ConsumerState<VoiceRecorderWidget>
 
       setState(() {
         _isProcessing = true;
-        _statusMessage = 'Converting voice to lyrics...';
+        _statusMessage = 'Uploading voice file and converting to WAV...';
       });
 
-      // Process the complete workflow
-      final result = await _aiVoiceService.processVoiceToSong(recordingPath);
+      // Upload file and start WAV conversion
+      final wavResult = await _aiVoiceService.uploadVoiceFileForWavConversion(recordingPath);
 
       setState(() {
+        _wavConversionResult = wavResult;
+        _statusMessage = 'Converting to WAV format...';
         _isProcessing = false;
-        _statusMessage = null;
-        _songResult = result;
       });
 
-      Logger.log('Song generation completed successfully');
+      // Start polling for WAV conversion status
+      _startWavStatusPolling();
+
+      Logger.log('WAV conversion started with taskId: ${wavResult.wavTaskId}');
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Song generation failed: $e';
+        _statusMessage = 'WAV conversion failed: $e';
         _currentState = VoiceRecordingState.error;
       });
-      Logger.log('Song generation error: $e');
+      Logger.log('WAV conversion error: $e');
       widget.onError?.call();
     }
+  }
+
+  // Poll WAV conversion status
+  void _startWavStatusPolling() {
+    if (_wavConversionResult == null || _isPollingWavStatus) return;
+
+    _isPollingWavStatus = true;
+    _pollWavStatus();
+  }
+
+  Future<void> _pollWavStatus() async {
+    if (!_isPollingWavStatus || _wavConversionResult == null) return;
+
+    try {
+      final status = await _aiVoiceService.getWavConversionStatus(_wavConversionResult!.wavTaskId);
+
+      setState(() {
+        _wavStatus = status;
+
+        if (status.isCompleted) {
+          _statusMessage = 'WAV conversion completed! Ready to generate music.';
+          _isPollingWavStatus = false;
+        } else if (status.hasError) {
+          _statusMessage = 'WAV conversion failed: ${status.message}';
+          _currentState = VoiceRecordingState.error;
+          _isPollingWavStatus = false;
+        } else {
+          _statusMessage = 'Converting to WAV... ${status.message}';
+        }
+      });
+
+      if (status.isProcessing) {
+        // Continue polling after 3 seconds
+        await Future.delayed(const Duration(seconds: 3));
+        _pollWavStatus();
+      }
+    } catch (e) {
+      setState(() {
+        _statusMessage = 'Error checking WAV status: $e';
+        _isPollingWavStatus = false;
+      });
+      Logger.log('WAV status polling error: $e');
+    }
+  }
+
+  // Generate music using converted WAV file
+  Future<void> _generateMusicWithWav() async {
+    try {
+      if (_wavStatus?.wavUrl == null || _wavStatus!.wavUrl.isEmpty) {
+        throw Exception('WAV file not available');
+      }
+
+      setState(() {
+        _isProcessing = true;
+        _statusMessage = 'Generating music with your voice...';
+      });
+
+      // Analyze voice for music generation parameters
+      final recordingPath = _audioService.currentRecordingPath;
+      if (recordingPath == null) {
+        throw Exception('No recording found');
+      }
+
+      final voiceResult = await _aiVoiceService.voiceToLyrics(recordingPath);
+
+      // Create analysis for music generation
+      final analysis = VoiceAnalysis(
+        mood: voiceResult.analyzedMood,
+        genre: voiceResult.detectedGenre,
+        tempo: voiceResult.suggestedTempo,
+        confidence: voiceResult.confidence,
+      );
+
+      // Complete the lyrics
+      final completedLyrics = await _aiVoiceService.completeLyrics(
+        originalLyrics: voiceResult.originalText,
+        mood: analysis.mood,
+        genre: analysis.genre,
+      );
+
+      // Generate music using the WAV file
+      final taskId = await _aiVoiceService.generateBackgroundMusic(
+        analysis: analysis,
+        completedLyrics: completedLyrics,
+        uploadedFileId: _wavStatus!.wavUrl, // Use WAV URL instead of original file
+      );
+
+      setState(() {
+        _statusMessage = 'Music generation started! This may take a few minutes...';
+        _isProcessing = false;
+      });
+
+      // Create result object (will be updated when music is ready)
+      final result = CompleteSongResult(
+        originalVoiceRecording: recordingPath,
+        transcribedLyrics: voiceResult.originalText,
+        completedLyrics: completedLyrics,
+        backgroundMusicUrl: '', // Will be updated via webhook
+        analysis: analysis,
+        finalMixedSongUrl: taskId, // Store taskId for tracking
+      );
+
+      setState(() {
+        _songResult = result;
+        _statusMessage = 'Processing your song... You\'ll be notified when it\'s ready!';
+      });
+
+      Logger.log('Music generation started with taskId: $taskId');
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = 'Music generation failed: $e';
+        _currentState = VoiceRecordingState.error;
+      });
+      Logger.log('Music generation error: $e');
+      widget.onError?.call();
+    }
+  }
+
+  // Keep the old method for backward compatibility
+  Future<void> _processSong() async {
+    // Direct to new workflow
+    await _uploadAndConvertToWav();
   }
 
   void _resetRecording() {
@@ -553,6 +703,11 @@ class _VoiceRecorderWidgetState extends ConsumerState<VoiceRecorderWidget>
       _statusMessage = null;
       _songResult = null;
       _isProcessing = false;
+
+      // Reset WAV conversion states
+      _wavConversionResult = null;
+      _wavStatus = null;
+      _isPollingWavStatus = false;
     });
   }
 

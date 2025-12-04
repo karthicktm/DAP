@@ -84,9 +84,7 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
           ),
         ),
       ),
-      floatingActionButton: _buildFloatingActionButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-    );
+      );
   }
 
   Widget _buildHeader(SettingsState settings, bool isConfigured) {
@@ -515,57 +513,7 @@ class _AIMusicStudioScreenState extends ConsumerState<AIMusicStudioScreen>
   }
 
 
-  Widget _buildFloatingActionButton() {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF8B5CF6).withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _onFabPressed,
-          borderRadius: BorderRadius.circular(28),
-          splashColor: Colors.white.withOpacity(0.3),
-          highlightColor: Colors.white.withOpacity(0.2),
-          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-        ),
-      ),
-    );
-  }
-
-  void _onFabPressed() {
-    switch (_currentTab) {
-      case 0:
-        // Trigger form generation using actual UI inputs
-        if (_triggerFormGeneration != null) {
-          _triggerFormGeneration!();
-        } else {
-          _showErrorSnackbar('Please wait for form to load');
-        }
-        break;
-      case 1:
-        _showMessage('Use the voice recorder below to record and generate songs!', const Color(0xFF14B8A6));
-        break;
-      case 2:
-        _showImportDialog();
-        break;
-    }
-  }
-
+  
   // DEPRECATED: This method is replaced by MusicGenerationForm._generateMusic()
   // which properly uses UI form inputs instead of hardcoded values
   Future<void> _generateMusic() async {
