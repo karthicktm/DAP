@@ -242,7 +242,7 @@ class AIVoiceService {
     }
   }
 
-  /// Generate complete song using kie.ai Add Vocals API
+  /// Generate complete song using kie.ai Upload and Cover Audio API
   Future<String> generateBackgroundMusic({
     required VoiceAnalysis analysis,
     required String completedLyrics,
@@ -250,84 +250,85 @@ class AIVoiceService {
     String? uploadedFileId,
   }) async {
     try {
-      Logger.log('Generating complete song with kie.ai Add Vocals API');
+      Logger.log('Generating complete song with kie.ai Upload and Cover Audio API');
 
       if (uploadedFileId == null) {
         throw Exception('No uploaded voice file URL provided');
       }
 
-      // Create vocal prompt based on analysis
-      final vocalPrompt = '''
-      Transform this voice recording into a complete song:
-      - Style: ${analysis.genre} ${analysis.mood}
-      - Tempo: ${analysis.tempo}
-      - Add professional background music that complements the vocals
-      - Enhance vocal quality and add harmonies if needed
-      - Create a radio-ready mix
+      // Create cover prompt based on analysis
+      final coverPrompt = '''
+      Create a ${analysis.genre} cover with ${analysis.mood} mood at ${analysis.tempo} tempo.
+      Transform this voice recording into a complete song with professional background music.
+      Enhance vocal quality and add harmonies. Create a radio-ready mix.
       ''';
 
       final endpoint = kIsWeb
-          ? '/api/proxy/kie/add-vocals'
-          : '/api/v1/generate/add-vocals';
+          ? '/api/proxy/kie/upload-cover'
+          : '/api/v1/generate/upload-cover';
 
       final response = await _dio.post(
         endpoint,
         data: {
-          'prompt': vocalPrompt,
-          'audioUrl': uploadedFileId, // Use audioUrl instead of audioId
+          'uploadUrl': uploadedFileId,
+          'prompt': coverPrompt,
+          'style': '${analysis.genre}, ${analysis.mood}',
+          'title': 'AI Generated Voice Cover',
+          'customMode': true,
+          'instrumental': false,
           'model': 'V5',
           'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
         },
       );
 
       if (response.statusCode == 200) {
-        final taskId = response.data['taskId'];
-        Logger.log('Add Vocals task started: $taskId');
+        final taskId = response.data['data']['taskId'];
+        Logger.log('Upload and Cover Audio task started: $taskId');
 
-        // Poll for completion (simple polling - in production you'd use webhooks)
-        return await _pollForCompletion(taskId);
+        // Return task ID - results will come via callback
+        return taskId;
       } else {
-        throw Exception('kie.ai Add Vocals failed: ${response.statusMessage}');
+        throw Exception('kie.ai Upload and Cover Audio failed: ${response.statusMessage}');
       }
     } catch (e) {
-      Logger.log('Error with Add Vocals API: $e');
-      throw Exception('Add Vocals failed: $e');
+      Logger.log('Error with Upload and Cover Audio API: $e');
+      throw Exception('Upload and Cover Audio failed: $e');
     }
   }
 
-  /// Poll for Add Vocals completion
-  Future<String> _pollForCompletion(String taskId) async {
-    Logger.log('Polling for completion of task: $taskId');
+  /// Convert generated music to WAV format using kie.ai WAV conversion API
+  Future<String> convertToWav({
+    required String taskId,
+    required String audioId,
+  }) async {
+    try {
+      Logger.log('Converting music to WAV format: taskId=$taskId, audioId=$audioId');
 
-    for (int i = 0; i < 30; i++) { // Max 5 minutes
-      await Future.delayed(const Duration(seconds: 10));
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/convert-wav'
+          : '/api/v1/wav/generate';
 
-      try {
-        final endpoint = kIsWeb
-            ? '/api/proxy/kie/generate-status/$taskId'
-            : '/generate/status/$taskId';
-        final response = await _dio.get(endpoint);
+      final response = await _dio.post(
+        endpoint,
+        data: {
+          'taskId': taskId,
+          'audioId': audioId,
+          'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/wav',
+        },
+      );
 
-        if (response.statusCode == 200) {
-          final status = response.data['status'];
-          Logger.log('Task $taskId status: $status');
-
-          if (status == 'completed') {
-            final audioUrl = response.data['result']['audioUrl'];
-            Logger.log('Add Vocals completed: $audioUrl');
-            return audioUrl;
-          } else if (status == 'failed') {
-            throw Exception('Add Vocals task failed');
-          }
-        }
-      } catch (e) {
-        Logger.log('Error checking task status: $e');
+      if (response.statusCode == 200) {
+        final wavTaskId = response.data['data']['taskId'];
+        Logger.log('WAV conversion task started: $wavTaskId');
+        return wavTaskId;
+      } else {
+        throw Exception('kie.ai WAV conversion failed: ${response.statusMessage}');
       }
+    } catch (e) {
+      Logger.log('Error with WAV conversion API: $e');
+      throw Exception('WAV conversion failed: $e');
     }
-
-    throw Exception('Add Vocals task timeout');
   }
-
 
   VoiceAnalysis _parseAnalysisResponse(String content) {
     try {

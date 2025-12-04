@@ -137,11 +137,70 @@ void main() async {
     }
   });
 
+  // WAV conversion webhook endpoint for kie.ai
+  app.post('/api/webhook/wav', (Request request) async {
+    final timestamp = DateTime.now().toIso8601String();
+    try {
+      print('🔔 [$timestamp] Received WAV webhook callback from kie.ai');
+
+      final body = await request.readAsString();
+      print('📄 Raw WAV webhook body: $body');
+
+      if (body.isEmpty) {
+        print('❌ Empty WAV webhook body received');
+        return Response.badRequest(body: 'Empty payload');
+      }
+
+      final payload = jsonDecode(body) as Map<String, dynamic>;
+
+      if (!_isValidKieAiWebhook(payload)) {
+        print('❌ Invalid WAV webhook payload structure');
+        return Response.badRequest(body: 'Invalid payload structure');
+      }
+
+      final code = payload['code'] as int;
+      final data = payload['data'] as Map<String, dynamic>;
+
+      if (code != 200) {
+        print('❌ WAV webhook error code: $code');
+        return Response.ok('WAV webhook received with error');
+      }
+
+      final taskId = data['task_id'] as String? ?? data['taskId'] as String?;
+      final wavUrl = data['wav_url'] as String? ?? data['wavUrl'] as String?;
+
+      print('📋 WAV conversion details: taskId=$taskId, wavUrl=$wavUrl');
+
+      if (taskId == null || wavUrl == null) {
+        print('❌ Missing taskId or wavUrl in WAV webhook payload');
+        return Response.badRequest(body: 'Missing required WAV data');
+      }
+
+      // Update track with WAV URL
+      await _updateTrackWithWav(taskId, wavUrl);
+
+      return Response.ok(
+        jsonEncode({'status': 'received', 'message': 'WAV webhook processed successfully'}),
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      );
+
+    } catch (e) {
+      print('❌ Error processing WAV webhook: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'status': 'error', 'message': e.toString()}),
+      );
+    }
+  });
+
   // Kie.ai API proxy endpoints for web frontend
   app.post('/api/proxy/kie/file-upload', _proxyKieFileUpload);
-  app.post('/api/proxy/kie/add-vocals', _proxyKieAddVocals);
+  app.post('/api/proxy/kie/upload-cover', _proxyKieUploadCover);
+  app.post('/api/proxy/kie/convert-wav', _proxyKieConvertWav);
   app.post('/api/proxy/kie/llm-generate', _proxyKieLlmGenerate);
-  app.get('/api/proxy/kie/generate-status/<taskId>', _proxyKieGenerateStatus);
+  app.get('/api/proxy/kie/music-details/<taskId>', _proxyKieMusicDetails);
 
   // Health check endpoint
   app.get('/health', (Request request) {
@@ -186,7 +245,11 @@ void main() async {
     return Response.ok('', headers: corsHeaders);
   });
 
-  app.options('/api/proxy/kie/add-vocals', (Request request) {
+  app.options('/api/proxy/kie/upload-cover', (Request request) {
+    return Response.ok('', headers: corsHeaders);
+  });
+
+  app.options('/api/proxy/kie/convert-wav', (Request request) {
     return Response.ok('', headers: corsHeaders);
   });
 
@@ -346,6 +409,53 @@ Future<void> _updateSupabaseStatus(String taskId, String status) async {
   } catch (e) {
     print('❌ Error updating status for taskId $taskId: $e');
     print('🔍 Status update error details: ${e.runtimeType}');
+  }
+}
+
+/// Update track with WAV URL from conversion webhook
+Future<void> _updateTrackWithWav(String taskId, String wavUrl) async {
+  try {
+    print('🎵 Updating track with WAV URL for taskId: $taskId');
+    print('🔊 WAV URL: $wavUrl');
+
+    final wavUpdate = {
+      'metadata': {
+        'wavUrl': wavUrl,
+        'wavProcessingCompleted': true,
+        'wavCompletedAt': DateTime.now().toIso8601String(),
+      },
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    // Try to update using taskId first
+    final updateResponse = await supabase
+        .from('tracks')
+        .update(wavUpdate)
+        .eq('id', taskId)
+        .select();
+
+    if (updateResponse.isNotEmpty) {
+      print('✅ Track updated with WAV URL using taskId as primary key');
+    } else {
+      print('⚠️ No track found with id=$taskId, trying metadata.taskId...');
+
+      // Fallback: Try to find track by taskId in metadata
+      final metadataUpdateResponse = await supabase
+          .from('tracks')
+          .update(wavUpdate)
+          .eq('metadata->>taskId', taskId)
+          .select();
+
+      if (metadataUpdateResponse.isNotEmpty) {
+        print('✅ Track updated with WAV URL using metadata.taskId');
+      } else {
+        print('❌ No track found with taskId: $taskId for WAV update');
+      }
+    }
+
+  } catch (e) {
+    print('❌ Error updating track with WAV URL for taskId $taskId: $e');
+    print('🔍 WAV update error details: ${e.runtimeType}');
   }
 }
 
@@ -687,14 +797,14 @@ Future<Response> _proxyKieFileUpload(Request request) async {
   }
 }
 
-/// Proxy Add Vocals to kie.ai
-Future<Response> _proxyKieAddVocals(Request request) async {
+/// Proxy Upload and Cover Audio to kie.ai
+Future<Response> _proxyKieUploadCover(Request request) async {
   try {
     final body = await request.readAsString();
     final payload = jsonDecode(body) as Map<String, dynamic>;
 
     final response = await http.post(
-      Uri.parse('https://api.kie.ai/api/v1/generate/add-vocals'),
+      Uri.parse('https://api.kie.ai/api/v1/generate/upload-cover'),
       headers: {
         'Authorization': 'Bearer $kieAiApiKey',
         'Content-Type': 'application/json',
@@ -712,7 +822,38 @@ Future<Response> _proxyKieAddVocals(Request request) async {
     );
   } catch (e) {
     return Response.internalServerError(
-      body: jsonEncode({'error': 'Add Vocals proxy failed: $e'}),
+      body: jsonEncode({'error': 'Upload and Cover Audio proxy failed: $e'}),
+      headers: {'Content-Type': 'application/json', ...corsHeaders},
+    );
+  }
+}
+
+/// Proxy WAV conversion to kie.ai
+Future<Response> _proxyKieConvertWav(Request request) async {
+  try {
+    final body = await request.readAsString();
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+
+    final response = await http.post(
+      Uri.parse('https://api.kie.ai/api/v1/wav/generate'),
+      headers: {
+        'Authorization': 'Bearer $kieAiApiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
+    );
+
+    return Response(
+      response.statusCode,
+      body: response.body,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'WAV conversion proxy failed: $e'}),
       headers: {'Content-Type': 'application/json', ...corsHeaders},
     );
   }
@@ -749,8 +890,8 @@ Future<Response> _proxyKieLlmGenerate(Request request) async {
   }
 }
 
-/// Proxy generation status check to kie.ai
-Future<Response> _proxyKieGenerateStatus(Request request) async {
+/// Proxy music details check to kie.ai
+Future<Response> _proxyKieMusicDetails(Request request) async {
   try {
     final taskId = request.params['taskId'];
     if (taskId == null) {
@@ -761,7 +902,7 @@ Future<Response> _proxyKieGenerateStatus(Request request) async {
     }
 
     final response = await http.get(
-      Uri.parse('https://api.kie.ai/api/v1/generate/status/$taskId'),
+      Uri.parse('https://api.kie.ai/api/v1/music/detail/$taskId'),
       headers: {
         'Authorization': 'Bearer $kieAiApiKey',
         'Content-Type': 'application/json',
