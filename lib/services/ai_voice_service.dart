@@ -86,20 +86,17 @@ class AIVoiceService {
     try {
       Logger.log('Processing voice recording with kie.ai Upload and Cover Audio API: $audioPath');
 
-      // Step 1: Prepare the voice file for direct upload
-      final preparedFile = await _prepareVoiceFile(audioPath);
-
-      // Step 2: Analyze the voice for mood and genre using LLM
+      // Step 1: Analyze the voice for mood and genre using LLM
       final analysis = await _analyzeVoiceFile(audioPath);
 
-      // Step 3: Return analysis result with prepared file for Upload and Cover Audio
+      // Step 2: Return analysis result with audio path for file upload workflow
       return VoiceToLyricsResult(
-        originalText: 'Voice recording prepared and analyzed',
+        originalText: 'Voice recording analyzed for mood and genre',
         analyzedMood: analysis.mood,
         detectedGenre: analysis.genre,
         suggestedTempo: analysis.tempo,
         confidence: analysis.confidence,
-        uploadedFileId: audioPath, // Store the original path for direct upload
+        uploadedFileId: audioPath, // Store the original path for upload workflow
       );
     } catch (e) {
       Logger.log('Error processing voice recording: $e');
