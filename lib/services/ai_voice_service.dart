@@ -10,17 +10,24 @@ import '../utils/logger.dart';
 /// AI Voice Service using only kie.ai APIs for all voice and music processing
 class AIVoiceService {
   late final Dio _dio;
-  static const String _baseUrl = 'https://api.kie.ai/v1';
+  static const String _kieAiBaseUrl = 'https://api.kie.ai/v1';
+  static const String _backendProxyUrl = 'https://dap-production-99ef.up.railway.app';
 
   AIVoiceService() {
+    // Use different base URLs based on platform
+    final baseUrl = kIsWeb ? _backendProxyUrl : _kieAiBaseUrl;
+    final headers = kIsWeb
+        ? {'Content-Type': 'application/json'} // No auth needed for proxy
+        : {
+            'Authorization': 'Bearer ${ApiConstants.kieAiApiKey}',
+            'Content-Type': 'application/json',
+          };
+
     _dio = Dio(BaseOptions(
-      baseUrl: _baseUrl,
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 60),
       receiveTimeout: const Duration(seconds: 120),
-      headers: {
-        'Authorization': 'Bearer ${ApiConstants.kieAiApiKey}',
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
     ));
 
     if (!kDebugMode) {
@@ -53,8 +60,12 @@ class AIVoiceService {
         base64Audio = base64Encode(bytes);
       }
 
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/file-upload'
+          : '/file-base64-upload';
+
       final response = await _dio.post(
-        '/file-base64-upload',
+        endpoint,
         data: {
           'data': base64Audio,
           'filename': 'voice_recording.webm',
@@ -104,8 +115,12 @@ class AIVoiceService {
   /// Analyze uploaded voice file for mood, genre, and tempo using kie.ai LLM
   Future<VoiceAnalysis> _analyzeVoiceFile(String fileId) async {
     try {
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/llm-generate'
+          : '/llm/generate';
+
       final response = await _dio.post(
-        '/llm/generate',
+        endpoint,
         data: {
           'model': 'gpt-4-turbo',
           'messages': [
@@ -166,8 +181,12 @@ class AIVoiceService {
     try {
       Logger.log('Completing lyrics with kie.ai - mood: $mood, genre: $genre');
 
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/llm-generate'
+          : '/llm/generate';
+
       final response = await _dio.post(
-        '/llm/generate',
+        endpoint,
         data: {
           'model': 'gpt-4-turbo',
           'messages': [
@@ -238,8 +257,12 @@ class AIVoiceService {
       - Create a radio-ready mix
       ''';
 
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/add-vocals'
+          : '/generate/add-vocals';
+
       final response = await _dio.post(
-        '/generate/add-vocals',
+        endpoint,
         data: {
           'prompt': vocalPrompt,
           'audioId': uploadedFileId,
@@ -270,7 +293,10 @@ class AIVoiceService {
       await Future.delayed(const Duration(seconds: 10));
 
       try {
-        final response = await _dio.get('/generate/status/$taskId');
+        final endpoint = kIsWeb
+            ? '/api/proxy/kie/generate-status/$taskId'
+            : '/generate/status/$taskId';
+        final response = await _dio.get(endpoint);
 
         if (response.statusCode == 200) {
           final status = response.data['status'];

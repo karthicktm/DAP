@@ -7,8 +7,10 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart' as cors;
 import 'package:supabase/supabase.dart';
+import 'package:http/http.dart' as http;
 
 late SupabaseClient supabase;
+late String kieAiApiKey;
 
 // Configure CORS headers globally
 const corsHeaders = {
@@ -21,14 +23,21 @@ void main() async {
   // Initialize Supabase client
   final supabaseUrl = Platform.environment['SUPABASE_URL'] ?? '';
   final supabaseKey = Platform.environment['SUPABASE_ANON_KEY'] ?? '';
+  kieAiApiKey = Platform.environment['KIE_AI_API_KEY'] ?? '';
 
   if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
     print('❌ Missing Supabase configuration. Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.');
     exit(1);
   }
 
+  if (kieAiApiKey.isEmpty) {
+    print('❌ Missing Kie.ai configuration. Set KIE_AI_API_KEY environment variable.');
+    exit(1);
+  }
+
   supabase = SupabaseClient(supabaseUrl, supabaseKey);
   print('✅ Supabase client initialized');
+  print('✅ Kie.ai API key configured');
 
   final app = Router();
 
@@ -128,6 +137,12 @@ void main() async {
     }
   });
 
+  // Kie.ai API proxy endpoints for web frontend
+  app.post('/api/proxy/kie/file-upload', _proxyKieFileUpload);
+  app.post('/api/proxy/kie/add-vocals', _proxyKieAddVocals);
+  app.post('/api/proxy/kie/llm-generate', _proxyKieLlmGenerate);
+  app.get('/api/proxy/kie/generate-status/<taskId>', _proxyKieGenerateStatus);
+
   // Health check endpoint
   app.get('/health', (Request request) {
     return Response.ok('Webhook service is healthy');
@@ -158,6 +173,11 @@ void main() async {
 
   // Handle CORS preflight requests
   app.options('/api/webhook/music', (Request request) {
+    return Response.ok('', headers: corsHeaders);
+  });
+
+  // CORS preflight for kie.ai proxy endpoints
+  app.options('/api/proxy/kie/<endpoint>', (Request request) {
     return Response.ok('', headers: corsHeaders);
   });
 
@@ -599,6 +619,136 @@ Future<Response> _getMigrationStatus(Request request) async {
         'error': e.toString(),
         'timestamp': DateTime.now().toIso8601String(),
       }),
+    );
+  }
+}
+
+/// Kie.ai API proxy functions for web frontend access
+
+/// Proxy file upload to kie.ai
+Future<Response> _proxyKieFileUpload(Request request) async {
+  try {
+    final body = await request.readAsString();
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+
+    final response = await http.post(
+      Uri.parse('https://api.kie.ai/api/file-base64-upload'),
+      headers: {
+        'Authorization': 'Bearer $kieAiApiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
+    );
+
+    return Response(
+      response.statusCode,
+      body: response.body,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'File upload proxy failed: $e'}),
+      headers: {'Content-Type': 'application/json', ...corsHeaders},
+    );
+  }
+}
+
+/// Proxy Add Vocals to kie.ai
+Future<Response> _proxyKieAddVocals(Request request) async {
+  try {
+    final body = await request.readAsString();
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+
+    final response = await http.post(
+      Uri.parse('https://api.kie.ai/api/v1/generate/add-vocals'),
+      headers: {
+        'Authorization': 'Bearer $kieAiApiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
+    );
+
+    return Response(
+      response.statusCode,
+      body: response.body,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Add Vocals proxy failed: $e'}),
+      headers: {'Content-Type': 'application/json', ...corsHeaders},
+    );
+  }
+}
+
+/// Proxy LLM generation to kie.ai
+Future<Response> _proxyKieLlmGenerate(Request request) async {
+  try {
+    final body = await request.readAsString();
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+
+    final response = await http.post(
+      Uri.parse('https://api.kie.ai/api/v1/llm/generate'),
+      headers: {
+        'Authorization': 'Bearer $kieAiApiKey',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
+    );
+
+    return Response(
+      response.statusCode,
+      body: response.body,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'LLM generation proxy failed: $e'}),
+      headers: {'Content-Type': 'application/json', ...corsHeaders},
+    );
+  }
+}
+
+/// Proxy generation status check to kie.ai
+Future<Response> _proxyKieGenerateStatus(Request request) async {
+  try {
+    final taskId = request.params['taskId'];
+    if (taskId == null) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Task ID is required'}),
+        headers: {'Content-Type': 'application/json', ...corsHeaders},
+      );
+    }
+
+    final response = await http.get(
+      Uri.parse('https://api.kie.ai/api/v1/generate/status/$taskId'),
+      headers: {
+        'Authorization': 'Bearer $kieAiApiKey',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    return Response(
+      response.statusCode,
+      body: response.body,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: jsonEncode({'error': 'Status check proxy failed: $e'}),
+      headers: {'Content-Type': 'application/json', ...corsHeaders},
     );
   }
 }
