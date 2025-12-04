@@ -235,17 +235,32 @@ class AIVoiceService {
       dynamic requestData;
 
       if (kIsWeb) {
-        // For web, send blob URL to proxy which will handle file conversion
-        requestData = {
-          'audioPath': uploadedFileId, // blob URL
-          'prompt': coverPrompt,
-          'style': '${analysis.genre}, ${analysis.mood}',
-          'title': 'AI Generated Voice Cover',
-          'customMode': true,
-          'instrumental': false,
-          'model': 'V5',
-          'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
-        };
+        // For web, create temporary file from blob URL and upload directly
+        try {
+          // Fetch blob data from URL
+          final response = await _dio.get(uploadedFileId, options: Options(responseType: ResponseType.bytes));
+          final audioBytes = response.data as List<int>;
+
+          requestData = FormData.fromMap({
+            'file': MultipartFile.fromBytes(
+              audioBytes,
+              filename: 'voice_recording.webm',
+            ),
+            'prompt': coverPrompt,
+            'style': '${analysis.genre}, ${analysis.mood}',
+            'title': 'AI Generated Voice Cover',
+            'customMode': 'true',
+            'instrumental': 'false',
+            'model': 'V5',
+            'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/music',
+          });
+
+          // Use direct API call for web too, bypassing proxy
+          endpoint = '/api/v1/generate/upload-cover';
+        } catch (e) {
+          Logger.log('Failed to fetch blob data: $e');
+          throw Exception('Failed to process web audio recording: $e');
+        }
       } else {
         // For mobile, prepare multipart form data with direct file upload
         final file = File(uploadedFileId);
