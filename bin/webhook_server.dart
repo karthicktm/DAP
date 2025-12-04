@@ -754,8 +754,15 @@ Future<Response> _proxyKieFileUpload(Request request) async {
     final body = await request.readAsString();
     final payload = jsonDecode(body) as Map<String, dynamic>;
 
-    final audioPath = payload['audioPath'] as String;
-    final filename = payload['filename'] as String;
+    final audioPath = payload['audioPath'] as String?;
+    final filename = payload['filename'] as String?;
+
+    if (audioPath == null || filename == null) {
+      return Response.badRequest(
+        body: jsonEncode({'error': 'Missing audioPath or filename in request'}),
+        headers: {'Content-Type': 'application/json', ...corsHeaders},
+      );
+    }
 
     // Fetch the blob from the frontend
     final blobResponse = await http.get(Uri.parse(audioPath));
