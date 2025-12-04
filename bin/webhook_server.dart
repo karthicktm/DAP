@@ -764,4 +764,4 @@ Future<Response> _proxyKieGenerateStatus(Request request) async {
       headers: {'Content-Type': 'application/json', ...corsHeaders},
     );
   }
-}
+}# Trigger Railway redeploy - Thu Dec  4 09:06:43 CET 2025
