@@ -268,26 +268,30 @@ class AIVoiceService {
 
       final response = await _dio.post(endpoint, data: requestData);
 
-      if (response.statusCode == 200) {
-        Logger.log('Upload and Cover Audio response: ${response.data}');
+      Logger.log('Upload and Cover Audio response: ${response.data}');
 
-        // Safely extract taskId with null checks
-        final data = response.data;
-        if (data is Map<String, dynamic>) {
-          final taskData = data['data'];
-          if (taskData is Map<String, dynamic>) {
-            final taskId = taskData['taskId'] as String?;
-            if (taskId != null) {
+      // Handle kie.ai response format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
+      final responseData = response.data;
+      if (responseData is Map<String, dynamic>) {
+        final code = responseData['code'] as int?;
+        final msg = responseData['msg'] as String?;
+
+        if (code == 200) {
+          final data = responseData['data'];
+          if (data is Map<String, dynamic>) {
+            final taskId = data['taskId'] as String?;
+            if (taskId != null && taskId.isNotEmpty) {
               Logger.log('Upload and Cover Audio task started: $taskId');
               return taskId;
             }
           }
+          throw Exception('Missing taskId in response: ${responseData}');
+        } else {
+          throw Exception('kie.ai API error (code: $code): $msg');
         }
-
-        throw Exception('Invalid response format: ${response.data}');
-      } else {
-        throw Exception('kie.ai Upload and Cover Audio failed: ${response.statusCode} ${response.statusMessage}');
       }
+
+      throw Exception('Invalid response format: ${response.data}');
     } catch (e) {
       Logger.log('Error with Upload and Cover Audio API: $e');
       throw Exception('Upload and Cover Audio failed: $e');
