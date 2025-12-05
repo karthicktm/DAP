@@ -62,6 +62,9 @@ A cutting-edge Flutter mobile application combining live radio streaming, AI-pow
 ### Phase 1 (8 weeks)
 - ✅ User authentication & profiles
 - ✅ AI music generation studio
+- ✅ Voice recording & upload functionality
+- ✅ Supabase storage integration
+- ✅ kie.ai API workflow implementation
 - ✅ Basic radio streaming
 - ✅ Real-time chat
 - ✅ Modern glassmorphic UI
@@ -125,7 +128,11 @@ A cutting-edge Flutter mobile application combining live radio streaming, AI-pow
    - `stations` - Radio stations
    - `ai_tracks` - Generated music tracks
    - `chat_messages` - Chat history
-3. Add URL and anon key to `.env`
+3. Create storage bucket:
+   - Bucket name: `voice_recordings`
+   - File size limit: 50MB
+   - Allowed MIME types: `audio/webm`, `audio/m4a`, `audio/mp3`, `audio/wav`
+4. Add URL and anon key to `.env`
 
 ## 📁 Project Structure
 
@@ -234,6 +241,9 @@ flutter build ios --release
 ### MVP Release (Q1 2025)
 - [x] Core app structure
 - [x] AI music generation
+- [x] Voice recording & upload workflow
+- [x] Supabase storage integration
+- [x] kie.ai API integration
 - [x] Basic radio functionality
 - [x] Real-time chat
 - [ ] App store deployment
@@ -269,6 +279,52 @@ For support and questions:
 - Join our Discord community
 - Check the documentation
 
+## 🧪 Testing
+
+### Voice Upload Workflow Test Scripts
+The following test scripts are included for comprehensive testing:
+
+- `test_voice_upload_local.dart` - Local environment and API connectivity testing
+- `test_music_generation_workflow.dart` - Complete music generation workflow testing
+- `test_complete_workflow_with_polling.dart` - Workflow with status polling
+- `create_supabase_bucket.dart` - Supabase bucket setup automation
+
+### Running Tests
+```bash
+# Test local configuration
+dart test_voice_upload_local.dart
+
+# Test music generation workflow
+dart test_music_generation_workflow.dart
+
+# Test complete workflow with polling
+dart test_complete_workflow_with_polling.dart
+```
+
+## 🎵 Voice Upload Workflow
+
+### Architecture
+The voice recording to music generation workflow follows this sequence:
+
+1. **Voice Recording** - User records audio using Flutter's `record` package
+2. **Supabase Upload** - Audio file is uploaded to Supabase storage bucket
+3. **kie.ai Processing** - File URL is sent to kie.ai Upload and Cover Audio API
+4. **Music Generation** - AI generates music from the voice recording
+5. **WAV Conversion** - Optional conversion to WAV format for compatibility
+
+### Key Components
+- **AI Voice Service** (`lib/services/ai_voice_service.dart`) - Main workflow orchestration
+- **Supabase Integration** - File storage and URL generation
+- **kie.ai API** - Music generation and WAV conversion
+- **Environment Configuration** - Railway/local deployment support
+
+### Recent Fixes (Dec 2025)
+- ✅ Fixed voice upload failure by implementing proper Supabase integration
+- ✅ Updated kie.ai API workflow to use Upload and Cover Audio API correctly
+- ✅ Removed plus symbol (FAB) from AI music studio screen as requested
+- ✅ Added comprehensive environment variable configuration
+- ✅ Implemented proper error handling and status polling
+
 ---
 
-Built with ❤️ using Flutter, kie.ai, Supabase, and PocketBase# Force Railway redeploy Thu Dec  4 18:31:21 CET 2025
+Built with ❤️ using Flutter, kie.ai, Supabase, and PocketBase
