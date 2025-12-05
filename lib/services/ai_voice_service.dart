@@ -1,35 +1,39 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'package:dio/dio.dart';
+import 'dart:typed_data';
+import 'package:dio/dio.dart' as d;
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/api_constants.dart';
 import '../utils/logger.dart';
 
-/// AI Voice Service using only kie.ai APIs for all voice and music processing
+/// AI Voice Service using Supabase for file storage and kie.ai for music processing
 class AIVoiceService {
-  late final Dio _dio;
+  late final d.Dio _dio;
+  late final SupabaseClient _supabase;
   static const String _kieAiBaseUrl = 'https://api.kie.ai';
   static const String _backendProxyUrl = 'https://dap-production-99ef.up.railway.app';
 
   AIVoiceService() {
+    // Initialize Supabase
+    _supabase = Supabase.instance.client;
+
     // Use different base URLs based on platform
     final baseUrl = kIsWeb ? _backendProxyUrl : _kieAiBaseUrl;
-    final headers = kIsWeb
-        ? {'Content-Type': 'application/json'} // No auth needed for proxy
-        : {
-            'Authorization': 'Bearer ${ApiConstants.kieAiApiKey}',
-            'Content-Type': 'application/json',
-          };
+    final headers = <String, dynamic>{
+      if (!kIsWeb) 'Authorization': 'Bearer ${ApiConstants.kieAiApiKey}',
+    };
 
-    _dio = Dio(BaseOptions(
+    _dio = d.Dio(d.BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 60),
       receiveTimeout: const Duration(seconds: 120),
-      headers: headers,
+      headers: headers as Map<String, dynamic>?,
     ));
 
     if (!kDebugMode) {
-      _dio.interceptors.add(LogInterceptor(
+      _dio.interceptors.add(d.LogInterceptor(
         requestBody: false,
         responseBody: true,
         logPrint: (obj) => Logger.log(obj.toString()),
@@ -49,7 +53,7 @@ class AIVoiceService {
         // For mobile, prepare file for direct multipart upload
         final file = File(audioPath);
         final bytes = await file.readAsBytes();
-        return MultipartFile.fromBytes(
+        return d.MultipartFile.fromBytes(
           bytes,
           filename: 'voice_recording.m4a',
         );
@@ -67,7 +71,7 @@ class AIVoiceService {
         // Use native JavaScript to fetch blob data
         final response = await _dio.get(
           audioPath,
-          options: Options(responseType: ResponseType.bytes)
+          options: d.Options(responseType: d.ResponseType.bytes)
         );
         return response.data as List<int>;
       } catch (e) {
@@ -225,67 +229,128 @@ class AIVoiceService {
     }
   }
 
-  /// Upload voice file to kie.ai file storage and return taskId for WAV conversion
+  /// Upload voice file to Supabase storage and return taskId for WAV conversion
   Future<WavConversionResult> uploadVoiceFileForWavConversion(String audioPath) async {
     try {
-      Logger.log('Uploading voice file for WAV conversion: $audioPath');
+      Logger.log('Uploading voice file to Supabase storage: $audioPath');
 
-      dynamic requestData;
-      String fileUploadUrl;
+      // Get audio bytes
+      final audioBytes = await _getBlobBytes(audioPath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = kIsWeb ? 'voice_recording_${timestamp}.webm' : 'voice_recording_${timestamp}.m4a';
+      final filePath = 'voice_recordings/$fileName';
 
-      if (kIsWeb) {
-        // For web, use proxy with blob URL (proxy will fetch and upload)
-        requestData = {
-          'audioPath': audioPath,
-          'filename': 'voice_recording.webm',
-        };
-        fileUploadUrl = '/api/proxy/kie/file-upload';
-      } else {
-        // For mobile, direct upload to kie.ai
-        final audioBytes = await _getBlobBytes(audioPath);
-        requestData = FormData.fromMap({
-          'file': MultipartFile.fromBytes(
-            audioBytes,
-            filename: 'voice_recording.m4a',
-          ),
-          'fileName': 'voice_recording.m4a',
-        });
-        fileUploadUrl = '/api/file-stream-upload';
-      }
+      // Upload to Supabase storage
+      final audioData = Uint8List.fromList(audioBytes);
+      await _supabase.storage
+          .from('voice_recordings')
+          .uploadBinary(filePath, audioData);
 
-      final response = await _dio.post(fileUploadUrl, data: requestData);
+      // Get public URL for the uploaded file
+      final publicUrl = await _supabase.storage
+          .from('voice_recordings')
+          .createSignedUrl(filePath, 604800); // 7 days in seconds
+      Logger.log('✅ Voice file uploaded to Supabase: $publicUrl');
 
-      Logger.log('File upload response: ${response.data}');
+      // Convert WAV will be done after music generation
+      final wavTaskId = '';
 
-      // Parse response to get downloadUrl
-      final responseData = response.data;
-      if (responseData is Map<String, dynamic>) {
-        final success = responseData['success'] as bool?;
-        if (success == true) {
-          final data = responseData['data'];
-          if (data is Map<String, dynamic>) {
-            final downloadUrl = data['downloadUrl'] as String?;
-            if (downloadUrl != null && downloadUrl.isNotEmpty) {
-              Logger.log('Voice file uploaded successfully: $downloadUrl');
-
-              // Start WAV conversion
-              final wavTaskId = await convertToWav(audioPath: audioPath, audioUrl: downloadUrl);
-
-              return WavConversionResult(
-                downloadUrl: downloadUrl,
-                wavTaskId: wavTaskId,
-                status: 'processing',
-              );
-            }
-          }
-        }
-        throw Exception('File upload failed: ${responseData['msg'] ?? 'Unknown error'}');
-      }
-
-      throw Exception('Invalid file upload response format: ${response.data}');
+      return WavConversionResult(
+        downloadUrl: publicUrl,
+        wavTaskId: wavTaskId,
+        status: 'processing',
+      );
     } catch (e) {
-      Logger.log('Error uploading voice file: $e');
+      Logger.log('Error uploading voice file to Supabase: $e');
       throw Exception('Voice file upload failed: $e');
+    }
+  }
+
+  /// Upload voice file to Supabase storage and generate music using kie.ai Upload and Cover Audio API
+  Future<MusicGenerationResult> uploadVoiceFileForMusicGeneration(String audioPath) async {
+    try {
+      Logger.log('Uploading voice file for music generation: $audioPath');
+
+      // Get audio bytes
+      final audioBytes = await _getBlobBytes(audioPath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = kIsWeb ? 'voice_recording_${timestamp}.webm' : 'voice_recording_${timestamp}.m4a';
+      final filePath = 'voice_recordings/$fileName';
+
+      // Upload to Supabase storage
+      final audioData = Uint8List.fromList(audioBytes);
+      await _supabase.storage
+          .from('voice_recordings')
+          .uploadBinary(filePath, audioData);
+
+      // Get public URL for the uploaded file
+      final publicUrl = await _supabase.storage
+          .from('voice_recordings')
+          .createSignedUrl(filePath, 604800); // 7 days in seconds
+      Logger.log('File uploaded successfully: $publicUrl');
+
+      // Generate music using kie.ai Upload and Cover Audio API
+      final endpoint = kIsWeb
+          ? '/api/proxy/kie/upload-cover'
+          : '/api/v1/generate/upload-cover';
+
+      final requestData = {
+        'upload_url': publicUrl,
+        'prompt': 'Convert this voice recording to a professional song with background music',
+        'style': 'pop, professional, high quality',
+        'title': 'Voice Cover Song',
+        'custom_mode': true,
+        'instrumental': false,
+        'model': 'V5',
+        'callback_url': '${_backendProxyUrl}/api/webhook/music-generation',
+      };
+
+      Logger.log('Generating music with Upload and Cover Audio API...');
+      final response = await _dio.post(
+        endpoint,
+        data: requestData,
+        options: d.Options(
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      Logger.log('Music generation response: ${response.data}');
+
+      if (response.statusCode == 200) {
+        final responseData = response.data;
+
+        // Extract taskId and audioId from response
+        String? taskId;
+        String? audioId;
+
+        if (responseData['data'] != null) {
+          final data = responseData['data'];
+          taskId = data['task_id'] ?? data['taskId'];
+          audioId = data['audio_id'] ?? data['audioId'] ?? data['id'];
+        } else {
+          taskId = responseData['task_id'] ?? responseData['taskId'];
+          audioId = responseData['audio_id'] ?? responseData['audioId'] ?? responseData['id'];
+        }
+
+        if (taskId == null || audioId == null) {
+          Logger.log('Invalid response format: ${response.data}');
+          throw Exception('Invalid response format from music generation API');
+        }
+
+        return MusicGenerationResult(
+          taskId: taskId,
+          audioId: audioId,
+          status: 'processing',
+        );
+      } else {
+        throw Exception('Music generation failed with status: ${response.statusCode}');
+      }
+    } catch (e) {
+      Logger.log('Error in music generation: $e');
+      throw Exception('Music generation failed: $e');
     }
   }
 
@@ -303,7 +368,7 @@ class AIVoiceService {
         data: {
           'task_id': wavTaskId, // Use snake_case parameter naming
         },
-        options: Options(
+        options: d.Options(
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -369,7 +434,7 @@ class AIVoiceService {
           message: 'HTTP ${response.statusCode}: ${response.statusMessage}',
         );
       }
-    } on DioException catch (e) {
+    } on d.DioException catch (e) {
       Logger.log('❌ DioException checking WAV status: ${e.response?.data}');
       final errorMessage = e.response?.data?['message'] ??
                          e.response?.data?['error'] ??
@@ -390,26 +455,25 @@ class AIVoiceService {
     }
   }
 
-  /// Convert uploaded file to WAV format
-  Future<String> convertToWav({required String audioPath, required String audioUrl}) async {
+  /// Convert a generated music track to WAV format
+  Future<String> convertToWav({required String taskId, required String audioId}) async {
     try {
-      Logger.log('Converting audio to WAV format: audioPath=$audioPath, audioUrl=$audioUrl');
+      Logger.log('Converting music track to WAV format: taskId=$taskId, audioId=$audioId');
 
       final endpoint = kIsWeb
           ? '/api/proxy/kie/convert-wav'
           : '/api/v1/wav/generate';
 
       final requestData = {
-        'audio_url': audioUrl, // Standard snake_case parameter naming
-        'callback_url': 'https://dap-production-99ef.up.railway.app/api/webhook/wav',
-        'format': 'wav', // Explicitly specify output format
-        'quality': 'high', // Add quality parameter
+        'taskId': taskId,
+        'audioId': audioId,
+        'callBackUrl': 'https://dap-production-99ef.up.railway.app/api/webhook/wav',
       };
 
       final response = await _dio.post(
         endpoint,
         data: requestData,
-        options: Options(
+        options: d.Options(
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -419,45 +483,30 @@ class AIVoiceService {
 
       Logger.log('WAV conversion response: ${response.data}');
 
-      // Handle standard API response formats
+      // Handle response format: {"code": 200, "msg": "success", "data": {"taskId": "..."}}
       if (response.statusCode == 200) {
         final responseData = response.data;
+        if (responseData is Map<String, dynamic>) {
+          final code = responseData['code'] as int?;
+          final data = responseData['data'];
 
-        // Try multiple common response formats
-        String? taskId;
-
-        // Format 1: {"success": true, "data": {"task_id": "..."}}
-        if (responseData['success'] == true &&
-            responseData['data'] != null &&
-            responseData['data']['task_id'] != null) {
-          taskId = responseData['data']['task_id'];
+          if (code == 200 && data is Map<String, dynamic>) {
+            final wavTaskId = data['taskId'] as String?;
+            if (wavTaskId != null && wavTaskId.isNotEmpty) {
+              Logger.log('✅ WAV conversion task started: $wavTaskId');
+              return wavTaskId;
+            }
+          }
+          throw Exception('Missing taskId in WAV conversion response');
         }
-
-        // Format 2: {"code": 200, "data": {"taskId": "..."}}
-        else if (responseData['code'] == 200 &&
-                 responseData['data'] != null &&
-                 responseData['data']['taskId'] != null) {
-          taskId = responseData['data']['taskId'];
-        }
-
-        // Format 3: {"task_id": "..."} (direct)
-        else if (responseData['task_id'] != null) {
-          taskId = responseData['task_id'];
-        }
-
-        if (taskId != null && taskId.isNotEmpty) {
-          Logger.log('✅ WAV conversion task started: $taskId');
-          return taskId;
-        }
-
-        throw Exception('Invalid response format: missing taskId');
+        throw Exception('Invalid WAV conversion response format');
       } else {
-        throw Exception('API request failed with status: ${response.statusCode}');
+        throw Exception('WAV conversion failed: ${response.statusCode} - ${response.statusMessage}');
       }
-    } on DioException catch (e) {
+    } on d.DioException catch (e) {
       Logger.log('❌ DioException in WAV conversion: ${e.response?.data}');
-      final errorMessage = e.response?.data?['message'] ??
-                         e.response?.data?['error'] ??
+      final errorMessage = e.response?.data?['msg'] ??
+                         e.response?.data?['message'] ??
                          e.message ??
                          'Network error during WAV conversion';
       throw Exception('WAV conversion failed: $errorMessage');
@@ -512,7 +561,7 @@ class AIVoiceService {
       final response = await _dio.post(
         endpoint,
         data: requestData,
-        options: Options(
+        options: d.Options(
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -557,7 +606,7 @@ class AIVoiceService {
       } else {
         throw Exception('API request failed with status: ${response.statusCode} - ${response.statusMessage}');
       }
-    } on DioException catch (e) {
+    } on d.DioException catch (e) {
       Logger.log('❌ DioException in Upload and Cover Audio: ${e.response?.data}');
       final errorMessage = e.response?.data?['message'] ??
                          e.response?.data?['error'] ??
@@ -725,4 +774,41 @@ class WavConversionStatus {
   bool get isCompleted => status == 'success';
   bool get isProcessing => status == 'processing' || status == 'pending';
   bool get hasError => status == 'error';
+}
+
+/// Music generation result
+class MusicGenerationResult {
+  final String taskId;
+  final String audioId;
+  final String status;
+  final bool isCompleted;
+  final bool isProcessing;
+  final String? downloadUrl;
+
+  MusicGenerationResult({
+    required this.taskId,
+    required this.audioId,
+    required this.status,
+    this.isCompleted = false,
+    this.isProcessing = true,
+    this.downloadUrl,
+  });
+
+  MusicGenerationResult copyWith({
+    String? taskId,
+    String? audioId,
+    String? status,
+    bool? isCompleted,
+    bool? isProcessing,
+    String? downloadUrl,
+  }) {
+    return MusicGenerationResult(
+      taskId: taskId ?? this.taskId,
+      audioId: audioId ?? this.audioId,
+      status: status ?? this.status,
+      isCompleted: isCompleted ?? this.isCompleted,
+      isProcessing: isProcessing ?? this.isProcessing,
+      downloadUrl: downloadUrl ?? this.downloadUrl,
+    );
+  }
 }

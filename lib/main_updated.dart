@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../constants/api_constants.dart';
 import 'providers/settings_provider.dart';
 import 'screens/settings_screen.dart';
 import 'screens/ai_music_studio_screen_simple.dart';
@@ -13,7 +15,17 @@ Future<void> main() async {
   // Load environment variables
   await dotenv.load(fileName: ".env");
 
-  // TrackDatabaseService will handle Supabase initialization when needed
+  // Initialize Supabase with environment variables
+  try {
+    await Supabase.initialize(
+      url: ApiConstants.supabaseUrl,
+      anonKey: ApiConstants.supabaseAnonKey,
+    );
+    print('✅ Supabase initialized successfully');
+  } catch (e) {
+    print('❌ Failed to initialize Supabase: $e');
+    // Continue without Supabase for development
+  }
 
   runApp(
     const ProviderScope(
